@@ -486,7 +486,7 @@ static Bool InitDefaultVisual(ScrnInfoPtr pScrn)
     }
     else
     {
-        pDrmMode->kbpp = 0;
+        pDrmMode->kbpp = defaultbpp;
     }
 
     bppflags = PreferConvert24to32 | SupportConvert24to32 | Support32bppFb;
@@ -501,8 +501,8 @@ static Bool InitDefaultVisual(ScrnInfoPtr pScrn)
         case 15:
         case 16:
         case 24:
-        case 30:
             break;
+        case 30:
         default:
                 xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                    "Given depth (%d) is not supported by the driver\n",
