@@ -49,6 +49,19 @@ static void drmmode_clear_pixmap(PixmapPtr pPixmap)
                __func__, pDrawable->depth);
 }
 
+
+/**
+* Requests that the driver resize the screen.
+*
+* The driver is responsible for updating scrn->virtualX and scrn->virtualY.
+* If the requested size cannot be set, the driver should leave those values
+* alone and return FALSE.
+*
+* A naive driver that cannot reallocate the screen may simply change
+* virtual[XY].  A more advanced driver will want to also change the
+* devPrivate.ptr and devKind of the screen pixmap, update any offscreen
+* pixmaps it may have moved, and change pScrn->displayWidth.
+*/
 Bool drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 {
     ScreenPtr pScreen = xf86ScrnToScreen(pScrn);
@@ -204,8 +217,8 @@ static int drmmode_create_lease(RRLeasePtr lease, int *fd)
 {
     ScreenPtr screen = lease->screen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(screen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    drmmode_ptr drmmode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    drmmode_ptr drmmode = &lsp->drmmode;
     int ncrtc = lease->numCrtcs;
     int noutput = lease->numOutputs;
     int nobjects;
@@ -217,7 +230,7 @@ static int drmmode_create_lease(RRLeasePtr lease, int *fd)
 
     nobjects = ncrtc + noutput;
 
-    if (ms->atomic_modeset)
+    if (lsp->atomic_modeset)
         nobjects += ncrtc; /* account for planes as well */
 
     if (nobjects == 0)
@@ -242,7 +255,7 @@ static int drmmode_create_lease(RRLeasePtr lease, int *fd)
         drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
         objects[i++] = drmmode_crtc->mode_crtc->crtc_id;
-        if (ms->atomic_modeset)
+        if (lsp->atomic_modeset)
             objects[i++] = drmmode_crtc->plane_id;
     }
 
@@ -278,13 +291,14 @@ static int drmmode_create_lease(RRLeasePtr lease, int *fd)
 
 static void drmmode_terminate_lease(RRLeasePtr lease)
 {
-    ScreenPtr screen = lease->screen;
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(screen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    drmmode_ptr drmmode = &ms->drmmode;
+    ScreenPtr pScreen = lease->screen;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     drmmode_lease_private_ptr lease_private = lease->devPrivate;
 
-    if (drmModeRevokeLease(drmmode->fd, lease_private->lessee_id) == 0) {
+    if (drmModeRevokeLease(pDrmMode->fd, lease_private->lessee_id) == 0)
+    {
         free(lease_private);
         lease->devPrivate = NULL;
         xf86CrtcLeaseTerminated(lease);

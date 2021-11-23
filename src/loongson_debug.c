@@ -33,10 +33,9 @@ Bool lsEnableDebug;
 
 void LS_PrepareDebug(ScrnInfoPtr pScrn)
 {
-
-    // loongsonRecPtr pLS = loongsonPTR(pScrn);
-    modesettingPtr ms = modesettingPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     /* Determine if the user wants debug messages turned on: */
-    lsEnableDebug = xf86ReturnOptValBool(ms->drmmode.Options, OPTION_DEBUG, FALSE);
+    lsEnableDebug = xf86ReturnOptValBool(pDrmMode->Options, OPTION_DEBUG, FALSE);
 }

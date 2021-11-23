@@ -68,15 +68,15 @@ void LS_ShadowFreeFB(ScrnInfoPtr pScrn, void **ppShadowFB)
 }
 
 
-static Bool LS_ShadowShouldDouble(ScrnInfoPtr pScrn, modesettingPtr ms)
+static Bool LS_ShadowShouldDouble(ScrnInfoPtr pScrn)
 {
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     Bool ret = FALSE, asked;
     int from;
 
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
     if (pDrmMode->is_lsdc)
         return FALSE;
-
 
     asked = xf86GetOptValBool(pDrmMode->Options,
                               OPTION_DOUBLE_SHADOW, &ret);
@@ -96,8 +96,8 @@ static Bool LS_ShadowShouldDouble(ScrnInfoPtr pScrn, modesettingPtr ms)
 
 void LS_TryEnableShadow(ScrnInfoPtr pScrn)
 {
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     Bool prefer_shadow = TRUE;
 
     uint64_t value = 0;
@@ -111,7 +111,7 @@ void LS_TryEnableShadow(ScrnInfoPtr pScrn)
     }
     else
     {
-        ret = drmGetCap(ms->fd, DRM_CAP_DUMB_PREFER_SHADOW, &value);
+        ret = drmGetCap(lsp->fd, DRM_CAP_DUMB_PREFER_SHADOW, &value);
         if (ret == 0)
         {
             prefer_shadow = !!value;
@@ -128,7 +128,7 @@ void LS_TryEnableShadow(ScrnInfoPtr pScrn)
             pDrmMode->shadow_enable ? "YES" : "NO");
 
     pDrmMode->shadow_enable2 = pDrmMode->shadow_enable ?
-        LS_ShadowShouldDouble(pScrn, ms) : FALSE;
+        LS_ShadowShouldDouble(pScrn) : FALSE;
 }
 
 
@@ -140,8 +140,8 @@ void *LS_ShadowWindow(ScreenPtr pScreen,
                       void *closure)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     int stride = (pScrn->displayWidth * pDrmMode->kbpp) / 8;
 
     *pSize = stride;
@@ -252,11 +252,11 @@ void LS_ShadowUpdatePacked(ScreenPtr pScreen,
                            struct _shadowBuf * const pSdwBuf)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     Bool use_3224 = pDrmMode->force_24_32 && (pScrn->bitsPerPixel == 32);
-    struct ShadowAPI * const pFnShadow = &ms->shadow;
+    struct ShadowAPI * const pFnShadow = &lsp->shadow;
 
     if (pDrmMode->shadow_enable2 && pDrmMode->shadow_fb2)
     {
@@ -272,8 +272,8 @@ void LS_ShadowUpdatePacked(ScreenPtr pScreen,
 
 Bool LS_ShadowLoadAPI(ScrnInfoPtr pScrn)
 {
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct ShadowAPI * const pShadowAPI = &ms->shadow;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct ShadowAPI * const pShadowAPI = &lsp->shadow;
     void *pMod = xf86LoadSubModule(pScrn, "shadow");
 
     if (NULL == pMod)

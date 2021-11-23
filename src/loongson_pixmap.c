@@ -164,7 +164,7 @@ void *LS_CreateExaPixmap(ScreenPtr pScreen,
 void LS_DestroyExaPixmap(ScreenPtr pScreen, void *driverPriv)
 {
     // ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    // modesettingPtr ms = modesettingPTR(pScrn);
+    // modesettingPtr ms = loongsonPTR(pScrn);
 
     struct ms_exa_pixmap_priv *priv = (struct ms_exa_pixmap_priv *)driverPriv;
 
@@ -249,9 +249,8 @@ void *LS_CreateDumbPixmap(ScreenPtr pScreen,
 void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct ms_exa_pixmap_priv *priv =
-        (struct ms_exa_pixmap_priv *)driverPriv;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct ms_exa_pixmap_priv *priv = (struct ms_exa_pixmap_priv *)driverPriv;
 
     if (priv->fd > 0)
     {
@@ -260,7 +259,7 @@ void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
 
     if ((priv->owned == TRUE) && (priv->bo != NULL))
     {
-        dumb_bo_destroy(ms->drmmode.fd, priv->bo);
+        dumb_bo_destroy(lsp->drmmode.fd, priv->bo);
 
 #ifdef FAKE_EXA_DEBUG
         INFO_MSG("DestroyPixmap bo:%p", priv->bo);
@@ -268,4 +267,32 @@ void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
     }
 
     free(priv);
+}
+
+
+PixmapPtr drmmode_create_pixmap_header(ScreenPtr pScreen,
+                                       int width,
+                                       int height,
+                                       int depth,
+                                       int bitsPerPixel,
+                                       int devKind,
+                                       void *pPixData)
+{
+    PixmapPtr pixmap;
+
+    /* width and height of 0 means don't allocate any pixmap data */
+    pixmap = pScreen->CreatePixmap(pScreen, 0, 0, depth, 0);
+
+    if (pixmap)
+    {
+        if (pScreen->ModifyPixmapHeader(pixmap, width, height, depth,
+                                           bitsPerPixel, devKind, pPixData))
+        {
+            return pixmap;
+        }
+
+        pScreen->DestroyPixmap(pixmap);
+    }
+
+    return NullPixmap;
 }

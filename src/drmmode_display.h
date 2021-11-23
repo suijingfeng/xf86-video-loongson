@@ -328,4 +328,8 @@ int crtc_add_dpms_props(drmModeAtomicReq *req,
                         xf86CrtcPtr crtc,
                         int new_dpms,
                         Bool *active);
+
+Bool drmmode_InitSharedPixmapFlipping(xf86CrtcPtr crtc,
+                                      drmmode_ptr drmmode);
+
 #endif

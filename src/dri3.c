@@ -59,15 +59,14 @@ static int ms_exa_dri3_open_client(ClientPtr client,
                                    int *fdp)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmode = &ms->drmmode;
-
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmode = &lsp->drmmode;
     int fd;
     drm_magic_t magic;
     int ret;
     struct stat master;
 
-    if (LS_IsRenderNode(ms->fd, &master))
+    if (LS_IsRenderNode(lsp->fd, &master))
     {
         return TRUE;
     }
@@ -119,7 +118,7 @@ static int ms_exa_dri3_open_client(ClientPtr client,
         }
     }
 
-    ret = drmAuthMagic(ms->drmmode.fd, magic);
+    ret = drmAuthMagic(pDrmode->fd, magic);
     if (ret < 0)
     {
         close(fd);
@@ -145,7 +144,9 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
                                         uint64_t modifier)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmode = &lsp->drmmode;
+
     PixmapPtr pPixmap;
     struct dumb_bo *bo = NULL;
     Bool ret;
@@ -165,7 +166,7 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
 
     /* width and height of 0 means don't allocate any pixmap data */
     pPixmap = pScreen->CreatePixmap(pScreen, 0, 0, depth,
-            CREATE_PIXMAP_USAGE_BACKING_PIXMAP);
+                                    CREATE_PIXMAP_USAGE_BACKING_PIXMAP);
 
     if (pPixmap == NullPixmap)
     {
@@ -188,7 +189,7 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
     }
 
 
-    bo = dumb_get_bo_from_fd(ms->drmmode.fd, fds[0],
+    bo = dumb_get_bo_from_fd(pDrmode->fd, fds[0],
                              strides[0], strides[0] * height);
 
     DEBUG_MSG("DRI3: PixmapFromFD: pixmap:%p %dx%d %d/%d %d->%d",
@@ -206,7 +207,7 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
     if (ret == FALSE)
     {
         pScreen->DestroyPixmap(pPixmap);
-        dumb_bo_destroy(ms->drmmode.fd, bo);
+        dumb_bo_destroy(pDrmode->fd, bo);
 
         TRACE_EXIT();
         return NULL;;
@@ -217,24 +218,27 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
 }
 
 
-static int ms_exa_egl_fd_from_pixmap(ScreenPtr screen,
+static int ms_exa_egl_fd_from_pixmap(ScreenPtr pScreen,
         PixmapPtr pixmap, CARD16 *stride, CARD32 *size)
 {
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(screen);
-    modesettingPtr ms = modesettingPTR(pScrn);
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     struct dumb_bo *bo;
     int prime_fd;
     int ret;
 
     TRACE_ENTER();
 
-    bo = dumb_bo_from_pixmap(screen, pixmap);
+    bo = dumb_bo_from_pixmap(pScreen, pixmap);
     if (bo == NULL)
     {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                "%s: failed to get bo from pixmap\n", __func__);
         return -1;
     }
 
-    ret = drmPrimeHandleToFD(ms->drmmode.fd, bo->handle, DRM_CLOEXEC, &prime_fd);
+    ret = drmPrimeHandleToFD(pDrmMode->fd, bo->handle, DRM_CLOEXEC, &prime_fd);
     if (ret)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -251,17 +255,17 @@ static int ms_exa_egl_fd_from_pixmap(ScreenPtr screen,
 }
 
 
-static int ms_exa_egl_fds_from_pixmap(ScreenPtr screen,
+static int ms_exa_egl_fds_from_pixmap(ScreenPtr pScreen,
                                       PixmapPtr pixmap,
                                       int *fds,
                                       uint32_t *strides,
                                       uint32_t *offsets,
                                       uint64_t *modifier)
 {
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(screen);
-    loongsonPtr ls = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ls->drmmode;
-    struct dumb_bo *bo = dumb_bo_from_pixmap(screen, pixmap);
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    struct dumb_bo *bo = dumb_bo_from_pixmap(pScreen, pixmap);
     int prime_fd;
     int ret;
 
@@ -328,8 +332,8 @@ static const dri3_screen_info_rec loongson_dri3_info = {
 Bool LS_DRI3_Init(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     int fd;
 

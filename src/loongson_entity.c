@@ -94,9 +94,9 @@ void LS_SetupEntity(ScrnInfoPtr scrn, int entity_num)
 static struct loongsonEntRec * LS_GetPrivEntity(ScrnInfoPtr pScrn)
 {
     DevUnion *pPriv;
-    modesettingPtr ms = modesettingPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
 
-    pPriv = xf86GetEntityPrivate(ms->pEnt->index, ls_entity_index);
+    pPriv = xf86GetEntityPrivate(lsp->pEnt->index, ls_entity_index);
     return pPriv->ptr;
 }
 

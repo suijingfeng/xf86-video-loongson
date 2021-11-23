@@ -65,9 +65,13 @@ void LS_DestroyExaPixmap(ScreenPtr pScreen, void *driverPriv);
 void * LS_CreateDumbPixmap(ScreenPtr pScreen,
         int width, int height, int depth,
         int usage_hint, int bitsPerPixel,
-        int *new_fb_pitch );
+        int *new_fb_pitch);
 
 void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv);
+
+PixmapPtr drmmode_create_pixmap_header(ScreenPtr pScreen,
+        int width, int height, int depth, int bitsPerPixel,
+        int devKind, void *pPixData);
 
 /*
 

@@ -179,12 +179,12 @@ static void redisplay_dirty(ScreenPtr pScreen,
     if (!pScreen->isGPU)
     {
 #ifdef GLAMOR_HAS_GBM
-        loongsonPtr ms = loongsonPTR(xf86ScreenToScrn(pScreen));
-        struct drmmode_rec * const pDrmMode = &ms->drmmode;
+        loongsonPtr lsp = loongsonPTR(xf86ScreenToScrn(pScreen));
+        struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
         if (pDrmMode->glamor_enabled)
         {
-            struct GlamorAPI * const pGlamor = &ms->glamor;
+            struct GlamorAPI * const pGlamor = &lsp->glamor;
 
             /*
              * When copying from the master framebuffer to the shared pixmap,
@@ -211,7 +211,8 @@ static void redisplay_dirty(ScreenPtr pScreen,
 static void ls_dirty_update(ScreenPtr pScreen, int *timeout)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     PixmapDirtyUpdatePtr ent;
 
@@ -232,7 +233,7 @@ static void ls_dirty_update(ScreenPtr pScreen, int *timeout)
             if (!pScreen->isGPU)
             {
                 msPixmapPrivPtr ppriv =
-                    msGetPixmapPriv(&ms->drmmode, pSlaveDst->master_pixmap);
+                    msGetPixmapPriv(pDrmMode, pSlaveDst->master_pixmap);
 
                 if (ppriv->notify_on_damage)
                 {
@@ -256,21 +257,24 @@ static void ls_dirty_update(ScreenPtr pScreen, int *timeout)
 
 static void msBlockHandler(ScreenPtr pScreen, void *timeout)
 {
-    loongsonPtr ms = loongsonPTR(xf86ScreenToScrn(pScreen));
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
 
-    pScreen->BlockHandler = ms->BlockHandler;
+    pScreen->BlockHandler = lsp->BlockHandler;
     pScreen->BlockHandler(pScreen, timeout);
-    ms->BlockHandler = pScreen->BlockHandler;
+    lsp->BlockHandler = pScreen->BlockHandler;
     pScreen->BlockHandler = msBlockHandler;
 
     if (pScreen->isGPU)
     {
-        xf86Msg(X_INFO, "%s IS GPU, dispatch dirty\n", __func__);
+        xf86DrvMsg(X_INFO, pScrn->scrnIndex,
+                   "%s IS GPU, dispatch dirty\n", __func__);
         LS_DispatchSlaveDirty(pScreen);
     }
-    else if (ms->dirty_enabled)
+    else if (lsp->dirty_enabled)
     {
-        xf86Msg(X_INFO, "%s: dispatch dirty\n", __func__);
+        xf86DrvMsg(X_INFO, pScrn->scrnIndex,
+                   "%s: dispatch dirty\n", __func__);
         LS_DispatchDirty(pScreen);
     }
 
@@ -897,8 +901,8 @@ static Bool msStopFlippingPixmapTracking(DrawablePtr src,
                              PixmapPtr slave_dst1, PixmapPtr slave_dst2)
 {
     ScreenPtr pScreen = src->pScreen;
-    loongsonPtr ms = loongsonPTR(xf86ScreenToScrn(pScreen));
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(xf86ScreenToScrn(pScreen));
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     msPixmapPrivPtr ppriv1 = msGetPixmapPriv(pDrmMode, slave_dst1->master_pixmap);
     msPixmapPrivPtr ppriv2 = msGetPixmapPriv(pDrmMode, slave_dst2->master_pixmap);
 
@@ -1001,19 +1005,17 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
     // This was set to pbits by miScreenDevPrivateInit() and pbits replaces
     // the FBStart fbScreenInit(), which is the screen memory address.
     //
-    // As we read in section 3.2.2.11: "Mga->FbStart is equal to pMga->FbBase
-    // since YDstOrg (the offset in bytes from video start to usable memory)
-    // is usually zero (see comment in MGAPreInit())".
+    // "Mga->FbStart is equal to pMga->FbBase since YDstOrg (the offset
+    // in bytes from video start to usable memory) is usually zero".
     //
-    // Additionally, if an aperture used to access video memory is
-    // unmapped and remapped in this fashion, ChipEnterVT() will
-    // also need to notify the framebuffer layers of the aperture's
-    // new location in virtual memory.  This is done with a call
-    // to the screen's ModifyPixmapHeader() function
+    // Additionally, if an aperture used to access video memory is unmapped
+    // and remapped in this fashion, EnterVT() will also need to notify the
+    // framebuffer layers of the aperture's new location in virtual memory.
+    // This is done with a call to the screen's ModifyPixmapHeader() function
     //
-    // where the rootPixmap field in a ScrnInfoRec points to the
-    // pixmap used by the screen's SaveRestoreImage() function to
-    // hold the screen's contents while switched out.
+    // Where the rootPixmap field in a ScrnInfoRec points to the pixmap used
+    // by the screen's SaveRestoreImage() function to hold the screen's
+    // contents while switched out.
     //
     // pixels is assumed to be the pixmap data; it will be stored in an
     // implementation-dependent place (usually pPixmap->devPrivate.ptr).
@@ -1030,6 +1032,8 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
                         rootPixmap,
                         LS_ShadowUpdatePacked,
                         LS_ShadowWindow, 0, NULL);
+
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "ShadowAPI->add() finished\n");
     }
 
     err = drmModeDirtyFB(lsp->fd, pDrmMode->fb_id, NULL, 0);

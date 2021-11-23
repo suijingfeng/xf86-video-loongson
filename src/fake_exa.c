@@ -41,6 +41,7 @@
 
 #include "loongson_options.h"
 #include "loongson_pixmap.h"
+#include "loongson_debug.h"
 
 
 struct ms_exa_prepare_args {
@@ -206,7 +207,6 @@ static void ms_exa_copy_done(PixmapPtr pPixmap)
 static Bool ms_exa_check_composite(int op, PicturePtr pSrcPicture,
                        PicturePtr pMaskPicture, PicturePtr pDstPicture)
 {
-
     if (!pSrcPicture->pDrawable)
         return FALSE;
 
@@ -623,7 +623,7 @@ struct dumb_bo *dumb_bo_from_pixmap(ScreenPtr pScreen, PixmapPtr pPixmap)
 {
     struct ms_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ls = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
 
     if (priv == NULL)
     {
@@ -632,7 +632,7 @@ struct dumb_bo *dumb_bo_from_pixmap(ScreenPtr pScreen, PixmapPtr pPixmap)
         return NULL;
     }
 
-    if (ls->exaDrvPtr == NULL)
+    if (lsp->exaDrvPtr == NULL)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                 "%s: exaDrvPtr is NULL\n", __func__);
@@ -681,10 +681,10 @@ Bool ms_exa_back_pixmap_from_fd(PixmapPtr pixmap,
                                 CARD8 depth,
                                 CARD8 bpp)
 {
-    ScreenPtr screen = pixmap->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(screen);
-    loongsonPtr ls = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ls->drmmode;
+    ScreenPtr pScreen = pixmap->drawable.pScreen;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     struct dumb_bo *bo;
     Bool ret;
 
@@ -694,8 +694,8 @@ Bool ms_exa_back_pixmap_from_fd(PixmapPtr pixmap,
         return FALSE;
     }
 
-    screen->ModifyPixmapHeader(pixmap, width, height,
-                               depth, bpp, stride, NULL);
+    pScreen->ModifyPixmapHeader(pixmap, width, height,
+                                depth, bpp, stride, NULL);
 
     ret = ms_exa_set_pixmap_bo(pScrn, pixmap, bo, TRUE);
     if (ret == FALSE)
@@ -734,10 +734,10 @@ int ms_exa_shareable_fd_from_pixmap(ScreenPtr pScreen,
 
 static Bool ms_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 {
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Using internal exa\n");
+    TRACE_ENTER();
 
     pExaDrv->exa_major = EXA_VERSION_MAJOR;
     pExaDrv->exa_minor = EXA_VERSION_MINOR;
@@ -792,6 +792,8 @@ static Bool ms_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
         pExaDrv->PrepareComposite = PrepareCompositeFail;
     }
 
+    TRACE_EXIT();
+
     return TRUE;
 }
 
@@ -799,14 +801,14 @@ static Bool ms_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 
 void try_enable_exa(ScrnInfoPtr pScrn)
 {
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     const char *accel_method_str = xf86GetOptValString(pDrmMode->Options,
                                                        OPTION_ACCEL_METHOD);
-    Bool do_exa = ( (accel_method_str != NULL) && (
-                      (strcmp(accel_method_str, "exa") == 0) ||
-                      (strcmp(accel_method_str, "EXA") == 0) ) );
+    Bool do_exa = ((accel_method_str != NULL) &&
+                   ((strcmp(accel_method_str, "exa") == 0) ||
+                    (strcmp(accel_method_str, "EXA") == 0)));
 
     if (do_exa)
     {
@@ -873,7 +875,7 @@ void try_enable_exa(ScrnInfoPtr pScrn)
 Bool LS_InitExaLayer(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
 
     ExaDriverPtr pExaDrv = exaDriverAlloc();
     if (pExaDrv == NULL)
@@ -893,7 +895,7 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_INFO, "EXA initialized successful.\n");
 
-        ms->exaDrvPtr = pExaDrv;
+        lsp->exaDrvPtr = pExaDrv;
 
         return TRUE;
     }
@@ -907,10 +909,10 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
 Bool LS_DestroyExaLayer(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
-    if (ms->exaDrvPtr != NULL)
+    if (lsp->exaDrvPtr != NULL)
     {
         PixmapPtr screen_pixmap = pScreen->GetScreenPixmap(pScreen);
 
@@ -924,9 +926,9 @@ Bool LS_DestroyExaLayer(ScreenPtr pScreen)
 
         exaDriverFini(pScreen);
 
-        free(ms->exaDrvPtr);
+        free(lsp->exaDrvPtr);
 
-        ms->exaDrvPtr = NULL;
+        lsp->exaDrvPtr = NULL;
 
         pDrmMode->exa_enabled = FALSE;
     }

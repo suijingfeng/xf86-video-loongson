@@ -139,75 +139,55 @@ Bool drmmode_set_target_scanout_pixmap(xf86CrtcPtr crtc,
 }
 
 
-static Bool drmmode_EnableSharedPixmapFlipping(xf86CrtcPtr crtc,
-                                               drmmode_ptr drmmode,
-                                               PixmapPtr front,
-                                               PixmapPtr back)
+/*
+ * LS_EnableSharedPixmapFlipping will allow the sink driver to setup for
+ * flipping between two shared pixmaps.
+ */
+static Bool LS_EnableSharedPixmapFlipping(RRCrtcPtr crtc,
+                                          PixmapPtr front,
+                                          PixmapPtr back)
 {
-    drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+    ScreenPtr pScreen = crtc->pScreen;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    xf86CrtcPtr xf86Crtc = crtc->devPrivate;
+    drmmode_crtc_private_ptr drmmode_crtc = xf86Crtc->driver_private;
+
+    if (!xf86Crtc)
+        return FALSE;
+
+    /* Not supported if we can't flip */
+    if (pDrmMode->pageflip)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "Not supported because of we can't flip\n");
+        return FALSE;
+    }
+
 
     drmmode_crtc->enable_flipping = TRUE;
 
     /* Set front scanout pixmap */
     drmmode_crtc->enable_flipping &=
-        drmmode_set_target_scanout_pixmap(crtc, front,
+        drmmode_set_target_scanout_pixmap(xf86Crtc, front,
                                           &drmmode_crtc->prime_pixmap);
     if (!drmmode_crtc->enable_flipping)
         return FALSE;
 
     /* Set back scanout pixmap */
     drmmode_crtc->enable_flipping &=
-        drmmode_set_target_scanout_pixmap(crtc, back,
+        drmmode_set_target_scanout_pixmap(xf86Crtc, back,
                                           &drmmode_crtc->prime_pixmap_back);
     if (!drmmode_crtc->enable_flipping)
     {
-        drmmode_set_target_scanout_pixmap(crtc, NULL,
+        drmmode_set_target_scanout_pixmap(xf86Crtc, NULL,
                                           &drmmode_crtc->prime_pixmap);
         return FALSE;
     }
 
     return TRUE;
-}
 
-
-static Bool msEnableSharedPixmapFlipping(RRCrtcPtr crtc,
-                                         PixmapPtr front,
-                                         PixmapPtr back)
-{
-    ScreenPtr screen = crtc->pScreen;
-    ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-    modesettingPtr ms = modesettingPTR(scrn);
-    EntityInfoPtr pEnt = ms->pEnt;
-    xf86CrtcPtr xf86Crtc = crtc->devPrivate;
-
-    if (!xf86Crtc)
-        return FALSE;
-
-    /* Not supported if we can't flip */
-    if (!ms->drmmode.pageflip)
-        return FALSE;
-
-#ifdef XSERVER_PLATFORM_BUS
-    if (pEnt->location.type == BUS_PLATFORM)
-    {
-        char *syspath =
-            xf86_platform_device_odev_attributes(pEnt->location.id.plat)->syspath;
-
-        /* Not supported for devices using USB transport due to misbehaved
-         * vblank events */
-        if (syspath && strstr(syspath, "usb"))
-            return FALSE;
-
-        /* EVDI uses USB transport but is platform device, not usb.
-         * Blacklist it explicitly */
-        if (syspath && strstr(syspath, "evdi"))
-        {
-            return FALSE;
-        }
-    }
-#endif
-
-    return drmmode_EnableSharedPixmapFlipping(xf86Crtc, &ms->drmmode, front, back);
 }
 
 
@@ -245,36 +225,37 @@ void drmmode_FiniSharedPixmapFlipping(xf86CrtcPtr crtc, drmmode_ptr drmmode)
 }
 
 
-
-static void drmmode_DisableSharedPixmapFlipping(xf86CrtcPtr crtc,
-                                                drmmode_ptr drmmode)
-{
-    drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-
-    drmmode_crtc->enable_flipping = FALSE;
-
-    drmmode_FiniSharedPixmapFlipping(crtc, drmmode);
-
-    drmmode_set_target_scanout_pixmap(crtc, NULL, &drmmode_crtc->prime_pixmap);
-
-    drmmode_set_target_scanout_pixmap(crtc, NULL,
-                                      &drmmode_crtc->prime_pixmap_back);
-}
-
-static void msDisableSharedPixmapFlipping(RRCrtcPtr crtc)
+/*
+ * LS_DisableSharedPixmapFlipping Will allow the sink driver to do
+ * teardown associated with flipping between two shared pixmaps.
+ */
+static void LS_DisableSharedPixmapFlipping(RRCrtcPtr crtc)
 {
     ScreenPtr pScreen = crtc->pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     xf86CrtcPtr xf86Crtc = crtc->devPrivate;
 
     if (xf86Crtc)
     {
-        drmmode_DisableSharedPixmapFlipping(xf86Crtc, &ms->drmmode);
+        drmmode_crtc_private_ptr drmmode_crtc = xf86Crtc->driver_private;
+
+        drmmode_crtc->enable_flipping = FALSE;
+
+        drmmode_FiniSharedPixmapFlipping(xf86Crtc, pDrmMode);
+
+        drmmode_set_target_scanout_pixmap(xf86Crtc, NULL,
+                                      &drmmode_crtc->prime_pixmap);
+
+        drmmode_set_target_scanout_pixmap(xf86Crtc, NULL,
+                                      &drmmode_crtc->prime_pixmap_back);
     }
 }
 
-static PixmapDirtyUpdatePtr ms_dirty_get_ent(ScreenPtr pScreen, PixmapPtr slave_dst)
+
+static PixmapDirtyUpdatePtr ls_dirty_get_ent(ScreenPtr pScreen,
+                                             PixmapPtr slave_dst)
 {
     PixmapDirtyUpdatePtr ent;
 
@@ -292,17 +273,23 @@ static PixmapDirtyUpdatePtr ms_dirty_get_ent(ScreenPtr pScreen, PixmapPtr slave_
     return NULL;
 }
 
-
-
-static Bool msStartFlippingPixmapTracking(RRCrtcPtr crtc, DrawablePtr src,
-                              PixmapPtr slave_dst1, PixmapPtr slave_dst2,
-                              int x, int y, int dst_x, int dst_y,
-                              Rotation rotation)
+/*
+ * (RRStart/Stop)FlippingPixmapTracking are merely the double-buffered
+ * equivalents of (Start/Stop)PixmapTracking, allowing the source driver
+ * to do whatever setup and teardown necessary for presenting on the two
+ * shared pixmaps.
+ */
+static Bool LS_StartFlippingPixmapTracking(RRCrtcPtr crtc,
+                                           DrawablePtr src,
+                                           PixmapPtr slave_dst1,
+                                           PixmapPtr slave_dst2,
+                                           int x, int y, int dst_x, int dst_y,
+                                           Rotation rotation)
 {
     ScreenPtr pScreen = src->pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     msPixmapPrivPtr ppriv1 = msGetPixmapPriv(pDrmMode, slave_dst1->master_pixmap);
     msPixmapPrivPtr ppriv2 = msGetPixmapPriv(pDrmMode, slave_dst2->master_pixmap);
@@ -325,8 +312,8 @@ static Bool msStartFlippingPixmapTracking(RRCrtcPtr crtc, DrawablePtr src,
     ppriv1->slave_src = src;
     ppriv2->slave_src = src;
 
-    ppriv1->dirty = ms_dirty_get_ent(pScreen, slave_dst1);
-    ppriv2->dirty = ms_dirty_get_ent(pScreen, slave_dst2);
+    ppriv1->dirty = ls_dirty_get_ent(pScreen, slave_dst1);
+    ppriv2->dirty = ls_dirty_get_ent(pScreen, slave_dst2);
 
     ppriv1->defer_dirty_update = TRUE;
     ppriv2->defer_dirty_update = TRUE;
@@ -344,9 +331,8 @@ void LS_InitRandR(ScreenPtr pScreen)
     {
         rrScrPrivPtr pScrPriv = rrGetScrPriv(pScreen);
 
-        pScrPriv->rrEnableSharedPixmapFlipping = msEnableSharedPixmapFlipping;
-        pScrPriv->rrDisableSharedPixmapFlipping = msDisableSharedPixmapFlipping;
-
-        pScrPriv->rrStartFlippingPixmapTracking = msStartFlippingPixmapTracking;
+        pScrPriv->rrEnableSharedPixmapFlipping = LS_EnableSharedPixmapFlipping;
+        pScrPriv->rrDisableSharedPixmapFlipping = LS_DisableSharedPixmapFlipping;
+        pScrPriv->rrStartFlippingPixmapTracking = LS_StartFlippingPixmapTracking;
     }
 }

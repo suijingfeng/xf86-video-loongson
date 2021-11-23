@@ -127,7 +127,7 @@ ms_dri2_create_buffer2(ScreenPtr screen, DrawablePtr drawable,
                        unsigned int attachment, unsigned int format)
 {
     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-    modesettingPtr ms = modesettingPTR(scrn);
+    loongsonPtr ms = loongsonPTR(scrn);
     DRI2Buffer2Ptr buffer;
     PixmapPtr pixmap;
     CARD32 size;
@@ -447,7 +447,7 @@ struct ms_dri2_vblank_event {
     void *event_data;
 };
 
-static void ms_dri2_flip_abort(modesettingPtr ms, void *data)
+static void ms_dri2_flip_abort(loongsonPtr ms, void *data)
 {
     struct ms_present_vblank_event *event = data;
     struct drmmode_rec * const pDrmMode = &ms->drmmode;
@@ -457,7 +457,7 @@ static void ms_dri2_flip_abort(modesettingPtr ms, void *data)
 }
 
 
-static void ms_dri2_flip_handler(modesettingPtr ms,
+static void ms_dri2_flip_handler(loongsonPtr ms,
                                  uint64_t msc,
                                  uint64_t ust,
                                  void *data)
@@ -487,7 +487,7 @@ ms_dri2_schedule_flip(ms_dri2_frame_event_ptr info)
     DrawablePtr draw = info->drawable;
     ScreenPtr screen = draw->pScreen;
     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-    modesettingPtr ms = modesettingPTR(scrn);
+    loongsonPtr ms = loongsonPTR(scrn);
     struct drmmode_rec * const pDrmMode = &ms->drmmode;
     ms_dri2_buffer_private_ptr back_priv = info->back->driverPrivate;
     struct ms_dri2_vblank_event *event;
@@ -521,7 +521,7 @@ update_front(DrawablePtr draw, DRI2BufferPtr front)
     ScreenPtr screen = draw->pScreen;
     PixmapPtr pixmap = get_drawable_pixmap(draw);
     ms_dri2_buffer_private_ptr priv = front->driverPrivate;
-    modesettingPtr ms = modesettingPTR(xf86ScreenToScrn(screen));
+    loongsonPtr ms = loongsonPTR(xf86ScreenToScrn(screen));
     CARD32 size;
     CARD16 pitch;
     int name;
@@ -593,7 +593,7 @@ static Bool can_exchange(ScrnInfoPtr scrn, DrawablePtr draw,
 static Bool can_flip(ScrnInfoPtr pScrn, DrawablePtr draw,
                      DRI2BufferPtr front, DRI2BufferPtr back)
 {
-    modesettingPtr ms = modesettingPTR(pScrn);
+    loongsonPtr ms = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &ms->drmmode;
 
     return (draw->type == DRAWABLE_WINDOW) &&
@@ -613,7 +613,7 @@ ms_dri2_exchange_buffers(DrawablePtr draw, DRI2BufferPtr front,
     ms_dri2_buffer_private_ptr back_priv = back->driverPrivate;
     ScreenPtr screen = draw->pScreen;
     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-    modesettingPtr ms = modesettingPTR(scrn);
+    loongsonPtr ms = loongsonPTR(scrn);
     struct drmmode_rec * const pDrmMode = &ms->drmmode;
     msPixmapPrivPtr front_pix = msGetPixmapPriv(pDrmMode, front_priv->pixmap);
     msPixmapPrivPtr back_pix = msGetPixmapPriv(pDrmMode, back_priv->pixmap);
@@ -1053,7 +1053,7 @@ ms_dri2_register_frame_event_resource_types(void)
 Bool ms_dri2_screen_init(ScreenPtr pScreen)
 {
     ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
-    modesettingPtr ms = modesettingPTR(scrn);
+    loongsonPtr ms = loongsonPTR(scrn);
     struct GlamorAPI * const pGlamor = &ms->glamor;
     const char *driver_names[2] = { NULL, NULL };
     Bool ret;

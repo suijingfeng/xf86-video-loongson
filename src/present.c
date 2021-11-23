@@ -248,13 +248,13 @@ static void ms_present_abort_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t 
  */
 static void ms_present_flush(WindowPtr window)
 {
-#ifdef GLAMOR_HAS_GBM
     ScreenPtr pScreen = window->drawable.pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
-    struct GlamorAPI * const pGlamor = &ms->glamor;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    struct GlamorAPI * const pGlamor = &lsp->glamor;
 
+#ifdef GLAMOR_HAS_GBM
     if (pDrmMode->glamor_enabled)
     {
         pGlamor->block_handler(pScreen);
@@ -415,8 +415,8 @@ static Bool ls_present_check_flip(RRCrtcPtr crtc,
 {
     ScreenPtr pScreen = window->drawable.pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = modesettingPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     if (pDrmMode->sprites_visible > 0)
     {
@@ -490,11 +490,11 @@ static Bool ls_present_flip(RRCrtcPtr crtc,
  */
 static void ls_present_unflip(ScreenPtr pScreen, uint64_t event_id)
 {
-    ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = modesettingPTR(scrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     PixmapPtr pixmap = pScreen->GetScreenPixmap(pScreen);
-    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
+    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
     int nCrtc = config->num_crtc;
     int i;
     Bool ret;
@@ -588,11 +588,11 @@ static present_screen_info_rec loongson_present_screen = {
 Bool ms_present_screen_init(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = modesettingPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     uint64_t value;
     int ret;
 
-    ret = drmGetCap(ms->fd, DRM_CAP_ASYNC_PAGE_FLIP, &value);
+    ret = drmGetCap(lsp->fd, DRM_CAP_ASYNC_PAGE_FLIP, &value);
     if ((ret == 0) && (value == 1))
     {
         loongson_present_screen.capabilities |= PresentCapabilityAsync;

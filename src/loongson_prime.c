@@ -85,17 +85,18 @@ static int dispatch_dirty_region(ScrnInfoPtr pScrn,
                                  DamagePtr damage,
                                  int fb_id)
 {
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     RegionPtr pDirty = DamageRegion(damage);
     const unsigned int nClipRects = REGION_NUM_RECTS(pDirty);
+    BoxPtr pRect = REGION_RECTS(pDirty);
     int ret = 0;
 
     if (nClipRects)
     {
-        drmModeClip * const pClip = xallocarray(nClipRects, sizeof(drmModeClip));
-        BoxPtr rect = REGION_RECTS(pDirty);
+        drmModeClip *pClip;
         unsigned int i;
 
+        pClip = xallocarray(nClipRects, sizeof(drmModeClip));
         if (pClip == NULL)
         {
             return -ENOMEM;
@@ -104,23 +105,24 @@ static int dispatch_dirty_region(ScrnInfoPtr pScrn,
         /* XXX no need for copy? */
         for (i = 0; i < nClipRects; ++i)
         {
-            pClip[i].x1 = rect->x1;
-            pClip[i].y1 = rect->y1;
-            pClip[i].x2 = rect->x2;
-            pClip[i].y2 = rect->y2;
+            pClip[i].x1 = pRect->x1;
+            pClip[i].y1 = pRect->y1;
+            pClip[i].x2 = pRect->x2;
+            pClip[i].y2 = pRect->y2;
 
-            ++rect;
+            ++pRect;
         }
 
         /* TODO query connector property to see if this is needed */
-        ret = drmModeDirtyFB(ms->fd, fb_id, pClip, nClipRects);
+        ret = drmModeDirtyFB(lsp->fd, fb_id, pClip, nClipRects);
 
         /* if we're swamping it with work, try one at a time */
         if (ret == -EINVAL)
         {
             for (i = 0; i < nClipRects; i++)
             {
-                if ((ret = drmModeDirtyFB(ms->fd, fb_id, &pClip[i], 1)) < 0)
+                ret = drmModeDirtyFB(lsp->fd, fb_id, &pClip[i], 1);
+                if (ret < 0)
                     break;
             }
         }
@@ -136,18 +138,18 @@ static int dispatch_dirty_region(ScrnInfoPtr pScrn,
 void LS_DispatchDirty(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     PixmapPtr pixmap = pScreen->GetScreenPixmap(pScreen);
-    int fb_id = ms->drmmode.fb_id;
+    int fb_id = lsp->drmmode.fb_id;
     int ret;
 
-    ret = dispatch_dirty_region(pScrn, pixmap, ms->damage, fb_id);
+    ret = dispatch_dirty_region(pScrn, pixmap, lsp->damage, fb_id);
     if ((ret == -EINVAL) || (ret == -ENOSYS))
     {
-        ms->dirty_enabled = FALSE;
-        DamageUnregister(ms->damage);
-        DamageDestroy(ms->damage);
-        ms->damage = NULL;
+        lsp->dirty_enabled = FALSE;
+        DamageUnregister(lsp->damage);
+        DamageDestroy(lsp->damage);
+        lsp->damage = NULL;
         xf86DrvMsg(pScrn->scrnIndex, X_INFO,
                    "Disabling kernel dirty updates, not required.\n");
         return;

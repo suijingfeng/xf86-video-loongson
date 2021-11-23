@@ -127,16 +127,13 @@ struct LoongsonRec {
 #endif
 };
 
-typedef struct LoongsonRec  modesettingRec;
-typedef struct LoongsonRec  loongsonRec;
 
-typedef struct LoongsonRec * modesettingPtr;
-typedef struct LoongsonRec * loongsonPtr;
+typedef struct LoongsonRec  loongsonRec;
+typedef struct LoongsonRec *loongsonPtr;
+
+#define loongsonPTR(p)    ((loongsonPtr)((p)->driverPrivate))
 
 #define glamor_finish(screen) ms->glamor.finish(screen)
-
-#define modesettingPTR(p) ((modesettingPtr)((p)->driverPrivate))
-#define loongsonPTR(p)    ((loongsonPtr)((p)->driverPrivate))
 
 
 xf86CrtcPtr ms_dri2_crtc_covering_drawable(DrawablePtr pDraw);

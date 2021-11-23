@@ -108,7 +108,7 @@ void LS_FreeFrontBO(ScrnInfoPtr pScrn, struct drmmode_rec * const pDrmMode)
 void *LS_MapFrontBO(ScrnInfoPtr pScrn, struct drmmode_rec * const pDrmMode)
 {
     int ret;
-    drmmode_bo * const pFBO = &pDrmMode->front_bo;
+    struct DrmModeBO * const pFBO = &pDrmMode->front_bo;
 
     if (pFBO->dumb->ptr)
     {
