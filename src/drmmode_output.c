@@ -179,8 +179,41 @@ static Bool drmmode_zaphod_string_matches(ScrnInfoPtr scrn,
     return ret;
 }
 
-static int koutput_get_prop_id(int fd, drmModeConnectorPtr koutput,
-                               int type, const char *name)
+
+static int koutput_get_prop_idx(int fd,
+                               drmModeConnectorPtr koutput,
+                               int type,
+                               const char *name)
+{
+    int idx = -1;
+    unsigned int i;
+    unsigned int nProps = koutput->count_props;
+
+    for (i = 0; i < nProps; ++i)
+    {
+        uint32_t property_id = koutput->props[i];
+        drmModePropertyPtr prop = drmModeGetProperty(fd, property_id);
+
+        if (!prop)
+            continue;
+
+        if (drm_property_type_is(prop, type) && !strcmp(prop->name, name))
+            idx = i;
+
+        drmModeFreeProperty(prop);
+
+        if (idx > -1)
+            break;
+    }
+
+    return idx;
+}
+
+
+static int koutput_get_prop_id(int fd,
+                               drmModeConnectorPtr koutput,
+                               int type,
+                               const char *name)
 {
     int idx = koutput_get_prop_idx(fd, koutput, type, name);
 
@@ -640,6 +673,21 @@ static DisplayModePtr drmmode_output_add_gtf_modes(xf86OutputPtr output,
 }
 
 
+
+static drmModePropertyBlobPtr koutput_get_prop_blob(int fd,
+                                             drmModeConnectorPtr koutput,
+                                             const char *name)
+{
+    drmModePropertyBlobPtr blob = NULL;
+    int idx = koutput_get_prop_idx(fd, koutput, DRM_MODE_PROP_BLOB, name);
+
+    if (idx > -1)
+        blob = drmModeGetPropertyBlob(fd, koutput->prop_values[idx]);
+
+    return blob;
+}
+
+
 static void drmmode_output_attach_tile(xf86OutputPtr output)
 {
     drmmode_output_private_ptr drmmode_output = output->driver_private;
@@ -660,7 +708,9 @@ static void drmmode_output_attach_tile(xf86OutputPtr output)
 
     if (drmmode_output->tile_blob)
     {
-        if (xf86OutputParseKMSTile(drmmode_output->tile_blob->data, 
+        xf86Msg(X_INFO, "HAVE TILE BLOB\n");
+
+        if (xf86OutputParseKMSTile(drmmode_output->tile_blob->data,
                drmmode_output->tile_blob->length, &tile_info) == TRUE)
         {
             set = &tile_info;
@@ -690,7 +740,10 @@ static DisplayModePtr drmmode_output_get_modes(xf86OutputPtr output)
 
     if (drmmode_output->edid_blob)
     {
-        xf86Msg(X_INFO, "have EDID blob\n");
+        xf86Msg(X_INFO, "\n");
+        xf86Msg(X_INFO, "HAVE EDID BLOB, SCREEN-%d\n",
+                        output->scrn->scrnIndex);
+
         mon = xf86InterpretEDID(output->scrn->scrnIndex,
                                 drmmode_output->edid_blob->data);
         if (mon && drmmode_output->edid_blob->length > 128)

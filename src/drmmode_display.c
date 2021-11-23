@@ -1941,53 +1941,6 @@ static unsigned int drmmode_crtc_init(ScrnInfoPtr pScrn,
 }
 
 
-
-
-
-int koutput_get_prop_idx(int fd, drmModeConnectorPtr koutput,
-                         int type, const char *name)
-{
-    int idx = -1;
-    unsigned int i;
-    unsigned int nProps = koutput->count_props;
-
-    for (i = 0; i < nProps; ++i)
-    {
-        uint32_t property_id = koutput->props[i];
-        drmModePropertyPtr prop = drmModeGetProperty(fd, property_id);
-
-        if (!prop)
-            continue;
-
-        if (drm_property_type_is(prop, type) && !strcmp(prop->name, name))
-            idx = i;
-
-        drmModeFreeProperty(prop);
-
-        if (idx > -1)
-            break;
-    }
-
-    return idx;
-}
-
-
-drmModePropertyBlobPtr koutput_get_prop_blob(int fd,
-                                             drmModeConnectorPtr koutput,
-                                             const char *name)
-{
-    drmModePropertyBlobPtr blob = NULL;
-    int idx = koutput_get_prop_idx(fd, koutput, DRM_MODE_PROP_BLOB, name);
-
-    if (idx > -1)
-        blob = drmModeGetPropertyBlob(fd, koutput->prop_values[idx]);
-
-    return blob;
-}
-
-
-
-
 static uint32_t
 find_clones(ScrnInfoPtr scrn, xf86OutputPtr output)
 {

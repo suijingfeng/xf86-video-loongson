@@ -298,15 +298,6 @@ Bool drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 void drmmode_validate_leases(ScrnInfoPtr scrn);
 
 
-int koutput_get_prop_idx(int fd,
-                         drmModeConnectorPtr koutput,
-                         int type,
-                         const char *name);
-
-drmModePropertyBlobPtr koutput_get_prop_blob(int fd,
-                                             drmModeConnectorPtr koutput,
-                                             const char *name);
-
 Bool drmmode_prop_info_copy(struct drmmode_prop_info_rec *dst,
                             const struct drmmode_prop_info_rec *src,
                             unsigned int num_props,
