@@ -494,34 +494,53 @@ static void drmmode_output_update_properties(xf86OutputPtr output)
             if (koutput->props[j] == p->mode_prop->prop_id) {
 
                 /* Check to see if the property value has changed */
-                if (koutput->prop_values[j] != p->value) {
-
+                if (koutput->prop_values[j] != p->value)
+                {
                     p->value = koutput->prop_values[j];
 
-                    if (p->mode_prop->flags & DRM_MODE_PROP_RANGE) {
+                    if (p->mode_prop->flags & DRM_MODE_PROP_RANGE)
+                    {
                         INT32 value = p->value;
 
-                        err = RRChangeOutputProperty(output->randr_output, p->atoms[0],
-                                                     XA_INTEGER, 32, PropModeReplace, 1,
-                                                     &value, FALSE, TRUE);
+                        err = RRChangeOutputProperty(output->randr_output,
+                                                     p->atoms[0],
+                                                     XA_INTEGER, 32,
+                                                     PropModeReplace, 1,
+                                                     &value,
+                                                     FALSE, TRUE);
 
-                        if (err != 0) {
+                        if (err != 0)
+                        {
                             xf86DrvMsg(output->scrn->scrnIndex, X_ERROR,
                                        "RRChangeOutputProperty error, %d\n", err);
                         }
+
+                        xf86DrvMsg(output->scrn->scrnIndex, X_INFO,
+                                   "MODE PROP RANGE: %u\n", value);
                     }
-                    else if (p->mode_prop->flags & DRM_MODE_PROP_ENUM) {
+                    else if (p->mode_prop->flags & DRM_MODE_PROP_ENUM)
+                    {
                         for (k = 0; k < p->mode_prop->count_enums; k++)
                             if (p->mode_prop->enums[k].value == p->value)
                                 break;
-                        if (k < p->mode_prop->count_enums) {
-                            err = RRChangeOutputProperty(output->randr_output, p->atoms[0],
-                                                         XA_ATOM, 32, PropModeReplace, 1,
-                                                         &p->atoms[k + 1], FALSE, TRUE);
-                            if (err != 0) {
+
+                        if (k < p->mode_prop->count_enums)
+                        {
+                            err = RRChangeOutputProperty(output->randr_output,
+                                                         p->atoms[0],
+                                                         XA_ATOM, 32,
+                                                         PropModeReplace, 1,
+                                                         &p->atoms[k + 1],
+                                                         FALSE, TRUE);
+                            if (err != 0)
+                            {
                                 xf86DrvMsg(output->scrn->scrnIndex, X_ERROR,
                                            "RRChangeOutputProperty error, %d\n", err);
                             }
+
+                            xf86DrvMsg(output->scrn->scrnIndex, X_INFO,
+                                   "MODE PROP ENUM: %lu\n", p->value);
+
                         }
                     }
                 }
@@ -534,13 +553,23 @@ static void drmmode_output_update_properties(xf86OutputPtr output)
 
 xf86OutputStatus drmmode_output_detect(xf86OutputPtr output)
 {
+    /**
+     * Associated ScrnInfo
+     */
+    ScrnInfoPtr pScrn = output->scrn;
+
     /* go to the hw and retrieve a new output struct */
     drmmode_output_private_ptr drmmode_output = output->driver_private;
     drmmode_ptr drmmode = drmmode_output->drmmode;
     xf86OutputStatus status;
 
     if (drmmode_output->output_id == -1)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s is disconnected\n", output->name);
+
         return XF86OutputStatusDisconnected;
+    }
 
     drmModeFreeConnector(drmmode_output->mode_output);
 
@@ -550,6 +579,8 @@ xf86OutputStatus drmmode_output_detect(xf86OutputPtr output)
     if (!drmmode_output->mode_output)
     {
         drmmode_output->output_id = -1;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s is disconnected\n", output->name);
         return XF86OutputStatusDisconnected;
     }
 
@@ -559,13 +590,20 @@ xf86OutputStatus drmmode_output_detect(xf86OutputPtr output)
     {
     case DRM_MODE_CONNECTED:
         status = XF86OutputStatusConnected;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s is connected\n", output->name);
         break;
     case DRM_MODE_DISCONNECTED:
         status = XF86OutputStatusDisconnected;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s is disconnected\n", output->name);
         break;
     default:
     case DRM_MODE_UNKNOWNCONNECTION:
         status = XF86OutputStatusUnknown;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s's status is unknown\n", output->name);
+
         break;
     }
 
@@ -761,7 +799,6 @@ static DisplayModePtr drmmode_output_get_modes(xf86OutputPtr output)
 
         drmmode_ConvertFromKMode(output->scrn, &koutput->modes[i], Mode);
         Modes = xf86ModesAdd(Modes, Mode);
-
     }
 
     return drmmode_output_add_gtf_modes(output, Modes);
