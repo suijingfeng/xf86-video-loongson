@@ -85,4 +85,8 @@ loongson_drv_la_SOURCES = \
 	 loongson_randr.h \
 	 loongson_randr.c \
 	 loongson_module.c
-	 $(NULL)
+
+EXTRA_DIST = \
+	 box.h \
+	 sprite.h \
+	 vblank.h
