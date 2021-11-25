@@ -96,6 +96,7 @@ struct LoongsonRec {
         void (*Remove)(ScreenPtr, PixmapPtr);
         void (*Update32to24)(ScreenPtr, shadowBufPtr);
         void (*UpdatePacked)(ScreenPtr, shadowBufPtr);
+        void (*Update32)(ScreenPtr, shadowBufPtr);
     } shadow;
 
 #ifdef GLAMOR_HAS_GBM

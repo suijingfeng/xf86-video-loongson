@@ -142,7 +142,7 @@ void *LS_ShadowWindow(ScreenPtr pScreen,
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    int stride = (pScrn->displayWidth * pDrmMode->kbpp) / 8;
+    int stride = pScrn->displayWidth * pDrmMode->kbpp / 8;
 
     *pSize = stride;
 
@@ -248,14 +248,85 @@ static void LS_DoubleShadowUpdate(struct drmmode_rec * const pDrmMode,
 
 }
 
+
+void LS_ShadowUpdate32(ScreenPtr pScreen, shadowBufPtr pBuf)
+{
+    RegionPtr damage = DamageRegion(pBuf->pDamage);
+    PixmapPtr pShadow = pBuf->pPixmap;
+    DrawablePtr pDrawable = &pShadow->drawable;
+
+    int nbox = RegionNumRects(damage);
+    BoxPtr pbox = RegionRects(damage);
+
+    _X_UNUSED int shaXoff, shaYoff;
+
+    PixmapPtr _pPix;
+    fbGetDrawablePixmap(pDrawable, _pPix, shaXoff, shaYoff);
+
+    unsigned int *shaBase = (unsigned int *) _pPix->devPrivate.ptr;
+    // 7680 / 4 = 1920
+    unsigned int shaStride = _pPix->devKind / sizeof (FbBits);
+    // 32
+    unsigned int shaBpp = _pPix->drawable.bitsPerPixel;
+
+    while (nbox--)
+    {
+        int x = pbox->x1;
+        int y = pbox->y1;
+        int w = pbox->x2 - pbox->x1;
+        int h = pbox->y2 - pbox->y1;
+        FbBits *shaLine = shaBase + y * shaStride + x;
+
+        while (h--)
+        {
+            uint32_t dst_stride = 0;
+            int scrBase = 0;
+            int width = w;
+            int scr = x;
+            FbBits *sha = shaLine;
+            FbBits *winBase = NULL, *win;
+
+            while (width)
+            {
+                /* how much remains in this window */
+                int i = scrBase + dst_stride - scr;
+                if (i <= 0 || scr < scrBase)
+                {
+                    winBase = (FbBits *) LS_ShadowWindow(pScreen,
+                                                         y,
+                                                         scr * 4,
+                                                         SHADOW_WINDOW_WRITE,
+                                                         &dst_stride,
+                                                         pBuf->closure);
+
+                    scrBase = scr;
+                    dst_stride /= 4;
+                    i = dst_stride;
+                }
+
+                win = winBase + (scr - scrBase);
+                if (i > width)
+                    i = width;
+                width -= i;
+                scr += i;
+                memcpy(win, sha, i * 4);
+                sha += i;
+            }
+            shaLine += shaStride;
+
+            y++;
+        }
+        pbox++;
+    }
+}
+
+
 void LS_ShadowUpdatePacked(ScreenPtr pScreen,
                            struct _shadowBuf * const pSdwBuf)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-
-    Bool use_3224 = pDrmMode->force_24_32 && (pScrn->bitsPerPixel == 32);
     struct ShadowAPI * const pFnShadow = &lsp->shadow;
 
     if (pDrmMode->shadow_enable2 && pDrmMode->shadow_fb2)
@@ -263,10 +334,18 @@ void LS_ShadowUpdatePacked(ScreenPtr pScreen,
         LS_DoubleShadowUpdate(pDrmMode, pSdwBuf);
     }
 
-    if (use_3224)
-        pFnShadow->Update32to24(pScreen, pSdwBuf);
+
+    if (pScrn->bitsPerPixel == 32)
+    {
+        if (pDrmMode->force_24_32)
+            pFnShadow->Update32to24(pScreen, pSdwBuf);
+        else
+            LS_ShadowUpdate32(pScreen, pSdwBuf);
+    }
     else
+    {
         pFnShadow->UpdatePacked(pScreen, pSdwBuf);
+    }
 }
 
 
@@ -290,6 +369,7 @@ Bool LS_ShadowLoadAPI(ScrnInfoPtr pScrn)
     pShadowAPI->Remove = LoaderSymbol("shadowRemove");
     pShadowAPI->Update32to24 = LoaderSymbol("shadowUpdate32to24");
     pShadowAPI->UpdatePacked = LoaderSymbol("shadowUpdatePacked");
+    pShadowAPI->Update32 = LS_ShadowUpdate32;
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
             "Shadow API's symbols loaded.\n");
