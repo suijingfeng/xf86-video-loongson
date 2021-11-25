@@ -50,10 +50,13 @@ loongson_drv_la_SOURCES = \
 	 drmmode_crtc_config.c \
 	 dumb_bo.c \
 	 dumb_bo.h \
+	 box.h \
 	 box.c \
 	 present.c \
+	 vblank.h \
 	 vblank.c \
 	 pageflip.c \
+	 sprite.h \
 	 sprite.c \
 	 dri3.c \
 	 fake_exa.c \
