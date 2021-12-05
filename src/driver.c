@@ -991,6 +991,9 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
         LS_ShadowAllocFB(pScrn, &pDrmMode->shadow_fb2);
     }
 
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+            "Virtual Address of the front bo: %p\n", pixels);
+
     // Recall the comment of of miCreateScreenResources()
     // create a pixmap with no data, then redirect it to point to the screen".
     //
