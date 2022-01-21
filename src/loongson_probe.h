@@ -44,6 +44,7 @@
 
 #define PCI_VENDOR_LOONGSON             0x0014
 #define PCI_CHIP_ID_7A1000              0x7a06
+#define PCI_CHIP_ID_7A2000              0x7a36
 
 #define PCI_VENDOR_ASPEED               0x1a03
 #define PCI_CHIP_ID_AST2400             0x2000
@@ -63,6 +64,14 @@
         PCI_MATCH_ANY, PCI_MATCH_ANY,              \
         0x00038000, 0x00ffff00, 0                  \
     }
+
+#define LOONGSON_DEVICE_MATCH_V3                   \
+    {                                              \
+        PCI_VENDOR_LOONGSON, PCI_CHIP_ID_7A2000,   \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,              \
+        0x00030000, 0x00ffff00, 0                  \
+    }
+
 
 // glamor developing on amdgpu rx560...
 /*

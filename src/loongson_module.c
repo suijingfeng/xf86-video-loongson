@@ -85,14 +85,10 @@ static Bool DriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
 }
 
 
-// suijingfeng : append here if you find new, this is nasty!
-// our goal is let the display controller get matched
-// but to reject gc1000.
 static const struct pci_id_match loongson_device_match[] = {
         LOONGSON_DEVICE_MATCH_V1 ,
         LOONGSON_DEVICE_MATCH_V2 ,
-        // glamor developing on amdgpu rx560 ...
-        // AMDGPU_DEVICE_RX560 ,
+        LOONGSON_DEVICE_MATCH_V3 ,
         {0, 0, 0},
 };
 
