@@ -539,19 +539,12 @@ Bool ms_exa_set_pixmap_bo(ScrnInfoPtr pScrn, PixmapPtr pPixmap,
                      struct dumb_bo *bo, Bool owned)
 {
     struct ms_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
-    struct LoongsonRec *ls = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ls->drmmode;
+    struct LoongsonRec *lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     int prime_fd;
     int ret;
 
-    if (priv == NULL)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: priv is NULL\n", __func__);
-        return FALSE;
-    }
-
-    if (ls->exaDrvPtr == NULL)
+    if (lsp->exaDrvPtr == NULL)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                 "%s: exaDrvPtr is NULL\n", __func__);
