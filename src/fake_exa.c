@@ -391,15 +391,6 @@ Bool ms_exa_prepare_access(PixmapPtr pPix, int index)
         return TRUE;
     }
 
-    if (NULL == priv)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-                    "%s: priv is NULL\n", __func__);
-
-        return FALSE;
-    }
-
-
     if (LS_IsDumbPixmap(priv->usage_hint))
     {
         ret = dumb_bo_map(pDrmMode->fd, priv->bo);
@@ -440,12 +431,6 @@ void ms_exa_finish_access(PixmapPtr pPixmap, int index)
     {
         pPixmap->devPrivate.ptr = NULL;
     }
-
-    // NOTE:
-    // can we use EXA migration module to track which parts of the
-    // buffer was accessed by sw, and pass that info down to kernel
-    // to do a more precise cache flush...
-    //
 }
 
 

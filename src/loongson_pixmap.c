@@ -67,7 +67,7 @@ Bool LS_IsDumbPixmap(int usage_hint)
 
     if (usage_hint == CREATE_PIXMAP_USAGE_SCRATCH)
     {
-        return TRUE;
+        return FALSE;
     }
 
     if (usage_hint == CREATE_PIXMAP_USAGE_SCANOUT)
