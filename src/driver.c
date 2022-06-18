@@ -171,7 +171,7 @@ static void redisplay_dirty(ScreenPtr pScreen,
 {
     RegionRec pixregion;
     // Shared / Scanout pixmap
-    PixmapPtr pSlaveDst = dirty->secondary_dst;
+    PixmapPtr pSlaveDst = dirty->slave_dst;
     PixmapRegionInit(&pixregion, pSlaveDst);
     DamageRegionAppend(&pSlaveDst->drawable, &pixregion);
     PixmapSyncDirtyHelper(dirty);
@@ -226,14 +226,14 @@ static void ls_dirty_update(ScreenPtr pScreen, int *timeout)
     {
         RegionPtr region = DamageRegion(ent->damage);
         /* Shared / scanout pixmap */
-        PixmapPtr pSlaveDst = ent->secondary_dst;
+        PixmapPtr pSlaveDst = ent->slave_dst;
 
         if (RegionNotEmpty(region))
         {
             if (!pScreen->isGPU)
             {
                 msPixmapPrivPtr ppriv =
-                    msGetPixmapPriv(pDrmMode, pSlaveDst->primary_pixmap);
+                    msGetPixmapPriv(pDrmMode, pSlaveDst->master_pixmap);
 
                 if (ppriv->notify_on_damage)
                 {
@@ -869,7 +869,7 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
 static Bool msPresentSharedPixmap(PixmapPtr slave_dst)
 {
     // pointer to master copy of pixmap for pixmap sharing
-    PixmapPtr pMasterPix = slave_dst->primary_pixmap;
+    PixmapPtr pMasterPix = slave_dst->master_pixmap;
     ScreenPtr pScreen = pMasterPix->drawable.pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
@@ -903,8 +903,8 @@ static Bool msStopFlippingPixmapTracking(DrawablePtr src,
     ScreenPtr pScreen = src->pScreen;
     loongsonPtr lsp = loongsonPTR(xf86ScreenToScrn(pScreen));
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    msPixmapPrivPtr ppriv1 = msGetPixmapPriv(pDrmMode, slave_dst1->primary_pixmap);
-    msPixmapPrivPtr ppriv2 = msGetPixmapPriv(pDrmMode, slave_dst2->primary_pixmap);
+    msPixmapPrivPtr ppriv1 = msGetPixmapPriv(pDrmMode, slave_dst1->master_pixmap);
+    msPixmapPrivPtr ppriv2 = msGetPixmapPriv(pDrmMode, slave_dst2->master_pixmap);
 
     Bool ret = TRUE;
 
@@ -1080,7 +1080,7 @@ static Bool msRequestSharedPixmapNotifyDamage(PixmapPtr pPix)
     loongsonPtr ms = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &ms->drmmode;
 
-    msPixmapPrivPtr ppriv = msGetPixmapPriv(pDrmMode, pPix->primary_pixmap);
+    msPixmapPrivPtr ppriv = msGetPixmapPriv(pDrmMode, pPix->master_pixmap);
 
     ppriv->notify_on_damage = TRUE;
 

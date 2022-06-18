@@ -905,7 +905,7 @@ static Bool
 drmmode_SharedPixmapPresent(PixmapPtr ppix, xf86CrtcPtr crtc,
                             drmmode_ptr drmmode)
 {
-    ScreenPtr master = crtc->randr_crtc->pScreen->current_primary;
+    ScreenPtr master = crtc->randr_crtc->pScreen->current_master;
 
     if (master->PresentSharedPixmap(ppix)) {
         /* Success, queue flip to back target */
