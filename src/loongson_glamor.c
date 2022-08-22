@@ -91,8 +91,7 @@ Bool try_enable_glamor(ScrnInfoPtr pScrn)
 #ifdef GLAMOR_HAS_GBM
     struct GlamorAPI * const pGlamor = &lsp->glamor;
 #endif
-    Bool do_glamor = (!accel_method_str ||
-                      (strcmp(accel_method_str, "glamor") == 0));
+    Bool do_glamor = (strcmp(accel_method_str, "glamor") == 0);
 
     pDrmMode->glamor_enabled = FALSE;
 
