@@ -478,15 +478,13 @@ static Bool InitDefaultVisual(ScrnInfoPtr pScrn)
 
     if ((defaultdepth == 24) && (defaultbpp == 24))
     {
-        pDrmMode->force_24_32 = TRUE;
-        pDrmMode->kbpp = 24;
         xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                "Using 24bpp hw front buffer with 32bpp shadow\n");
-        defaultbpp = 32;
+                "24bpp hw front buffer is not supported\n");
     }
     else
     {
         pDrmMode->kbpp = defaultbpp;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "kbpp = %d\n", defaultbpp);
     }
 
     bppflags = PreferConvert24to32 | SupportConvert24to32 | Support32bppFb;

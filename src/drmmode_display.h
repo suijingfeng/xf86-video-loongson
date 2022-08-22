@@ -118,7 +118,6 @@ struct drmmode_rec {
 
     /** Is Option "PageFlip" enabled? */
     Bool pageflip;
-    Bool force_24_32;
     void *shadow_fb;
     void *shadow_fb2;
     /* SCREEN SPECIFIC_PRIVATE_KEYS */

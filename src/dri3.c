@@ -188,7 +188,6 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
         return NullPixmap;
     }
 
-
     bo = dumb_get_bo_from_fd(pDrmode->fd, fds[0],
                              strides[0], strides[0] * height);
 

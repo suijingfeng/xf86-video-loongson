@@ -97,12 +97,6 @@ Bool try_enable_glamor(ScrnInfoPtr pScrn)
     pDrmMode->glamor_enabled = FALSE;
 
 #ifdef GLAMOR_HAS_GBM
-    if (pDrmMode->force_24_32)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
-                       "Cannot use glamor with 24bpp packed fb\n");
-        return FALSE;
-    }
 
     if (do_glamor == FALSE)
     {
