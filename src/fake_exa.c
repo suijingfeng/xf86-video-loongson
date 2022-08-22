@@ -776,8 +776,7 @@ static Bool ms_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 }
 
 
-
-void try_enable_exa(ScrnInfoPtr pScrn)
+Bool try_enable_exa(ScrnInfoPtr pScrn)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
@@ -790,15 +789,13 @@ void try_enable_exa(ScrnInfoPtr pScrn)
 
     if (do_exa)
     {
-        const char * pExaType2D;
-        pDrmMode->exa_enabled = TRUE;
-
-        xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "EXA enabled.\n");
+        const char *pExaType2D = NULL;
 
         if (NULL == xf86LoadSubModule(pScrn, "exa"))
         {
             xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
                     "Loading exa submodule failed.\n");
+            return FALSE;
         }
 
         pExaType2D = xf86GetOptValString(pDrmMode->Options, OPTION_EXA_TYPE);
@@ -824,6 +821,10 @@ void try_enable_exa(ScrnInfoPtr pScrn)
             {
                 pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_ETNAVIV;
             }
+
+            xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "EXA enabled.\n");
+            pDrmMode->exa_enabled = TRUE;
+            return TRUE;
         }
         else
         {
@@ -833,6 +834,8 @@ void try_enable_exa(ScrnInfoPtr pScrn)
             // default is fake exa
             pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_FAKE;
         }
+
+        return TRUE;
     }
     else
     {
@@ -840,9 +843,10 @@ void try_enable_exa(ScrnInfoPtr pScrn)
         // don't care this
         pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_FAKE;
 
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "%s: No EXA support in this driver.\n", __func__);
+        xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "EXA support is not enabled\n");
     }
+
+    return FALSE;
 }
 
 

@@ -709,13 +709,14 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
             xf86DrvMsg(pScrn->scrnIndex, X_INFO,
                 "DRM PRIME is supported, trying fake EXA + DRI3.\n");
 
-            try_enable_exa(pScrn);
+            pDrmMode->exa_enabled = try_enable_exa(pScrn);
         }
         else
         {
+            pDrmMode->exa_enabled = FALSE;
+
             xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
                 "DRM PRIME is NOT supported, will fallback to shadow.\n");
-                pDrmMode->exa_enabled = FALSE;
         }
     }
 

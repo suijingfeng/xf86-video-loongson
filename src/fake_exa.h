@@ -41,8 +41,7 @@ enum ExaAccelType {
 };
 
 
-void try_enable_exa(ScrnInfoPtr pScrn);
-
+Bool try_enable_exa(ScrnInfoPtr pScrn);
 
 Bool LS_InitExaLayer(ScreenPtr pScreen);
 Bool LS_DestroyExaLayer(ScreenPtr pScreen);
