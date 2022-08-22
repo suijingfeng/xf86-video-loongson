@@ -333,7 +333,6 @@ Bool LS_DRI3_Init(ScreenPtr pScreen)
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-
     int fd;
 
     TRACE_ENTER();
@@ -346,14 +345,14 @@ Bool LS_DRI3_Init(ScreenPtr pScreen)
     }
 
     fd = drmOpenWithType("etnaviv", NULL, DRM_NODE_RENDER);
-    if ( fd != -1)
+    if (fd != -1)
     {
         drmVersionPtr version = drmGetVersion(fd);
         if (version)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Version: %d.%d.%d\n",
-                    version->version_major, version->version_minor,
-                    version->version_patchlevel);
+                       version->version_major, version->version_minor,
+                       version->version_patchlevel);
             xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Name: %s\n", version->name);
             xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Date: %s\n", version->date);
             xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Description: %s\n", version->desc);
