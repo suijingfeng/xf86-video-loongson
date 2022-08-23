@@ -51,7 +51,8 @@ static SymTabRec Chipsets[] =
 {
         {0, "loongson-drm"},
         {1, "lsdc"},
-        {-1, NULL}
+        {2, "gsgpu"},
+	{-1, NULL}
 };
 
 static void Identify(int flags)
@@ -84,14 +85,13 @@ static Bool DriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
     }
 }
 
-
 static const struct pci_id_match loongson_device_match[] = {
         LOONGSON_DEVICE_MATCH_V1 ,
         LOONGSON_DEVICE_MATCH_V2 ,
-        LOONGSON_DEVICE_MATCH_V3 ,
-        {0, 0, 0},
+        LOONGSON_DEVICE_MATCH_DC_IN_7A2000 ,
+        LOONGSON_DEVICE_MATCH_GSGPU ,
+	{0, 0, 0},
 };
-
 
 static MODULESETUPPROTO(fnSetup);
 

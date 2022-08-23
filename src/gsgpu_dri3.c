@@ -38,7 +38,7 @@
 #include <misyncshm.h>
 
 #include "driver.h"
-#include "lsdc_dri3.h"
+#include "gsgpu_dri3.h"
 #include "loongson_debug.h"
 
 static int LS_IsRenderNode(int fd, struct stat *st)
@@ -51,6 +51,7 @@ static int LS_IsRenderNode(int fd, struct stat *st)
 
     return st->st_rdev & 0x80;
 }
+
 
 static int ms_exa_dri3_open_client(ClientPtr client,
                                    ScreenPtr pScreen,
@@ -112,7 +113,7 @@ static int ms_exa_dri3_open_client(ClientPtr client,
         {
             close(fd);
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                    "DRI3Open: cannot get magic : ret %d\n", ret);
+                       "DRI3: cannot get magic : ret %d\n", ret);
             return BadMatch;
         }
     }
@@ -122,7 +123,7 @@ static int ms_exa_dri3_open_client(ClientPtr client,
     {
         close(fd);
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "DRI3Open: cannot auth magic: ret %d\n", ret);
+                   "DRI3: cannot auth magic: ret %d\n", ret);
         return BadMatch;
     }
 
@@ -232,7 +233,7 @@ static int ms_exa_egl_fd_from_pixmap(ScreenPtr pScreen,
     if (bo == NULL)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: failed to get bo from pixmap\n", __func__);
+                   "failed to get bo from pixmap\n");
         return -1;
     }
 
@@ -240,7 +241,7 @@ static int ms_exa_egl_fd_from_pixmap(ScreenPtr pScreen,
     if (ret)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: failed to get dmabuf fd: %d\n", __func__, ret);
+                   "failed to get dmabuf fd: %d\n", ret);
         return ret;
     }
 
@@ -270,7 +271,7 @@ static int ms_exa_egl_fds_from_pixmap(ScreenPtr pScreen,
     if (bo == NULL)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: failed to get bo from pixmap\n", __func__);
+                   "%s: failed to get bo from pixmap\n", __func__);
         return 0;
     }
 
@@ -315,7 +316,7 @@ static Bool ms_exa_get_drawable_modifiers(DrawablePtr draw,
 }
 
 
-static const dri3_screen_info_rec loongson_dri3_info = {
+static const dri3_screen_info_rec gsgpu_dri3_info = {
     .version = 2,
     .open_client = ms_exa_dri3_open_client,
     .pixmap_from_fds = ms_exa_pixmap_from_fds,
@@ -327,7 +328,7 @@ static const dri3_screen_info_rec loongson_dri3_info = {
 };
 
 
-Bool LS_DRI3_Init(ScreenPtr pScreen)
+Bool gsgpu_dri3_init(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
@@ -343,7 +344,7 @@ Bool LS_DRI3_Init(ScreenPtr pScreen)
         return FALSE;
     }
 
-    fd = drmOpenWithType("etnaviv", NULL, DRM_NODE_RENDER);
+    fd = drmOpenWithType("gsgpu", NULL, DRM_NODE_RENDER);
     if (fd != -1)
     {
         drmVersionPtr version = drmGetVersion(fd);
@@ -363,10 +364,10 @@ Bool LS_DRI3_Init(ScreenPtr pScreen)
     pDrmMode->dri3_device_name = drmGetDeviceNameFromFd2(pDrmMode->fd);
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-        "DRI3 Screen init: device name: %s.\n",
-        pDrmMode->dri3_device_name);
+               "DRI3 Screen init: device name: %s.\n",
+               pDrmMode->dri3_device_name);
 
     TRACE_EXIT();
 
-    return dri3_screen_init(pScreen, &loongson_dri3_info);
+    return dri3_screen_init(pScreen, &gsgpu_dri3_info);
 }

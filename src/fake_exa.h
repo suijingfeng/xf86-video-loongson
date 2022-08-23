@@ -37,7 +37,8 @@ enum ExaAccelType {
     EXA_ACCEL_TYPE_FAKE = 1,
     EXA_ACCEL_TYPE_SOFTWARE = 2,
     EXA_ACCEL_TYPE_VIVANTE = 3,
-    EXA_ACCEL_TYPE_ETNAVIV = 4
+    EXA_ACCEL_TYPE_ETNAVIV = 4,
+    EXA_ACCEL_TYPE_GSGPU = 5
 };
 
 
@@ -54,9 +55,6 @@ struct dumb_bo * dumb_bo_from_pixmap(ScreenPtr screen, PixmapPtr pixmap);
 
 Bool ms_exa_prepare_access(PixmapPtr pPix, int index);
 void ms_exa_finish_access(PixmapPtr pPix, int index);
-
-Bool LS_DRI3_Init(ScreenPtr screen);
-
 void ms_exa_exchange_buffers(PixmapPtr front, PixmapPtr back);
 
 

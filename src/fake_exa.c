@@ -425,12 +425,14 @@ Bool ms_exa_prepare_access(PixmapPtr pPix, int index)
  */
 void ms_exa_finish_access(PixmapPtr pPixmap, int index)
 {
+/*
     struct ms_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
 
     if (priv && priv->bo)
     {
         pPixmap->devPrivate.ptr = NULL;
     }
+*/
 }
 
 
@@ -770,6 +772,24 @@ static Bool ms_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
         pExaDrv->PrepareComposite = PrepareCompositeFail;
     }
 
+    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
+    {
+        /* Always fallback for software operations */
+        pExaDrv->PrepareCopy = PrepareCopyFail;
+        pExaDrv->PrepareSolid = PrepareSolidFail;
+        pExaDrv->CheckComposite = CheckCompositeFail;
+        pExaDrv->PrepareComposite = PrepareCompositeFail;
+    }
+
+    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
+    {
+        /* Always fallback for software operations */
+        pExaDrv->PrepareCopy = PrepareCopyFail;
+        pExaDrv->PrepareSolid = PrepareSolidFail;
+        pExaDrv->CheckComposite = CheckCompositeFail;
+        pExaDrv->PrepareComposite = PrepareCompositeFail;
+    }
+
     TRACE_EXIT();
 
     return TRUE;
@@ -780,13 +800,18 @@ Bool try_enable_exa(ScrnInfoPtr pScrn)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    const char *accel_method_str;
+    Bool do_exa;
 
-    const char *accel_method_str = xf86GetOptValString(pDrmMode->Options,
-                                                       OPTION_ACCEL_METHOD);
-    Bool do_exa = ((accel_method_str != NULL) &&
-                   ((strcmp(accel_method_str, "exa") == 0) ||
-                    (strcmp(accel_method_str, "EXA") == 0)));
+    accel_method_str = xf86GetOptValString(pDrmMode->Options,
+                                           OPTION_ACCEL_METHOD);
+    do_exa = ((accel_method_str != NULL) &&
+              ((strcmp(accel_method_str, "exa") == 0) ||
+               (strcmp(accel_method_str, "EXA") == 0)));
 
+    xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
+               "EXA method: %s\n", accel_method_str);
+ 
     if (do_exa)
     {
         const char *pExaType2D = NULL;
@@ -820,6 +845,10 @@ Bool try_enable_exa(ScrnInfoPtr pScrn)
             else if (strcmp(pExaType2D, "etnaviv") == 0)
             {
                 pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_ETNAVIV;
+            }
+            else if (strcmp(pExaType2D, "gsgpu") == 0)
+            {
+                pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_GSGPU;
             }
 
             xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,

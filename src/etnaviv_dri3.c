@@ -26,7 +26,6 @@
 
 #include "driver.h"
 #include "etnaviv_dri3.h"
-#include "fake_exa.h"
 #include "loongson_debug.h"
 
 static Bool etnaviv_dri3_authorise(struct drmmode_rec * const pDrmmode, int fd)

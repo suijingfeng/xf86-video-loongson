@@ -37,17 +37,14 @@
 #include <pciaccess.h>
 #endif
 
-
 //#define PCI_VENDOR_AMD                0x1022
 //#define PCI_VENDOR_ATI                0x1002
-#define PCI_CHIP_ID_RX560               0x67ff
+//#define PCI_CHIP_ID_RX560             0x67ff
 
 #define PCI_VENDOR_LOONGSON             0x0014
 #define PCI_CHIP_ID_7A1000              0x7a06
 #define PCI_CHIP_ID_7A2000              0x7a36
-
-#define PCI_VENDOR_ASPEED               0x1a03
-#define PCI_CHIP_ID_AST2400             0x2000
+#define PCI_CHIP_ID_GSGPU               0x7a25
 
 // LEMOTE 3A3000 BOARD HAVE 0x00030000
 #define LOONGSON_DEVICE_MATCH_V1                   \
@@ -65,12 +62,20 @@
         0x00038000, 0x00ffff00, 0                  \
     }
 
-#define LOONGSON_DEVICE_MATCH_V3                   \
+#define LOONGSON_DEVICE_MATCH_DC_IN_7A2000         \
     {                                              \
         PCI_VENDOR_LOONGSON, PCI_CHIP_ID_7A2000,   \
         PCI_MATCH_ANY, PCI_MATCH_ANY,              \
         0x00030000, 0x00ffff00, 0                  \
     }
+
+#define LOONGSON_DEVICE_MATCH_GSGPU                \
+    {                                              \
+        PCI_VENDOR_LOONGSON, PCI_CHIP_ID_GSGPU,    \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,              \
+        0x00040000, 0x00ffff00, 0                  \
+    }
+
 
 
 // glamor developing on amdgpu rx560...

@@ -71,8 +71,9 @@
 #include "loongson_randr.h"
 
 #include "sprite.h"
-
+#include "lsdc_dri3.h"
 #include "etnaviv_dri3.h"
+#include "gsgpu_dri3.h"
 
 static Bool PreInit(ScrnInfoPtr pScrn, int flags);
 static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv);
@@ -703,7 +704,7 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
 
     // first try glamor, then try EXA
     // if both failed, using the shadowfb
-    if (try_enable_glamor(pScrn) == FALSE)
+    if (1 || try_enable_glamor(pScrn) == FALSE)
     {
         // if prime is not supported by the kms, fallback to shadow.
         if (is_prime_supported)
@@ -718,13 +719,16 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
             pDrmMode->exa_enabled = try_enable_exa(pScrn);
 
             xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-                "DRM PRIME is NOT supported, will fallback to shadow.\n");
+                "DRM PRIME is NOT supported, try EXA with no prime.\n");
         }
     }
 
     if ((FALSE == pDrmMode->glamor_enabled) &&
         (FALSE == pDrmMode->exa_enabled))
     {
+        xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+                   "DRM PRIME is NOT supported, will fallback to shadow.\n");
+
         LS_TryEnableShadow(pScrn);
     }
 
@@ -1573,6 +1577,8 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
             ret = LS_DRI3_Init(pScreen);
         else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
             ret = etnaviv_dri3_ScreenInit(pScreen);
+        else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
+            ret = gsgpu_dri3_init(pScreen);
 
         if (ret == FALSE)
         {
