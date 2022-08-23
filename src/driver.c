@@ -72,6 +72,8 @@
 
 #include "sprite.h"
 
+#include "etnaviv_dri3.h"
+
 static Bool PreInit(ScrnInfoPtr pScrn, int flags);
 static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv);
 
@@ -713,13 +715,12 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
         }
         else
         {
-            pDrmMode->exa_enabled = FALSE;
+            pDrmMode->exa_enabled = try_enable_exa(pScrn);
 
             xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
                 "DRM PRIME is NOT supported, will fallback to shadow.\n");
         }
     }
-
 
     if ((FALSE == pDrmMode->glamor_enabled) &&
         (FALSE == pDrmMode->exa_enabled))
@@ -1211,7 +1212,7 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr ms = loongsonPTR(pScrn);
     struct drmmode_rec * pDrmMode = &ms->drmmode;
-    int ret;
+    Bool ret = FALSE;
 #ifdef GLAMOR_HAS_GBM
     struct GlamorAPI * const pGlamor = &ms->glamor;
 #endif
@@ -1568,7 +1569,12 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 #ifdef DRI3
     if (pDrmMode->exa_enabled)
     {
-        if (!LS_DRI3_Init(pScreen))
+        if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
+            ret = LS_DRI3_Init(pScreen);
+        else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
+            ret = etnaviv_dri3_ScreenInit(pScreen);
+
+        if (ret == FALSE)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                        "Failed to initialize the DRI3 extension.\n");

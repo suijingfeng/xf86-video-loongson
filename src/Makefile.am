@@ -59,6 +59,7 @@ loongson_drv_la_SOURCES = \
 	 sprite.h \
 	 sprite.c \
 	 dri3.c \
+	 etnaviv_dri3.c \
 	 fake_exa.c \
 	 fake_exa.h \
 	 loongson_buffer.h \

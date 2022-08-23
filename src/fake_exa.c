@@ -822,7 +822,8 @@ Bool try_enable_exa(ScrnInfoPtr pScrn)
                 pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_ETNAVIV;
             }
 
-            xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "EXA enabled.\n");
+            xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
+                       "EXA enabled, method: %s\n", pExaType2D);
             pDrmMode->exa_enabled = TRUE;
             return TRUE;
         }
