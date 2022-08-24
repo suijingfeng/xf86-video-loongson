@@ -41,14 +41,16 @@
 
 #define CREATE_PIXMAP_USAGE_SCANOUT 0x80000000
 
-struct ms_exa_pixmap_priv {
+struct exa_pixmap_priv {
     struct dumb_bo *bo;
+    struct LoongsonBuf *pBuf;
     int fd;
+    int refcnt;
     int pitch;
+    int usage_hint;
     Bool owned;
     Bool is_dumb;
-    struct LoongsonBuf *pBuf;
-    int usage_hint;
+    Bool mapped;
 };
 
 

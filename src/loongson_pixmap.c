@@ -112,11 +112,11 @@ void *LS_CreateExaPixmap(ScreenPtr pScreen,
                          int *new_fb_pitch)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    struct ms_exa_pixmap_priv *priv;
+    struct exa_pixmap_priv *priv;
 
     TRACE_ENTER();
 
-    priv = calloc(1, sizeof(struct ms_exa_pixmap_priv));
+    priv = calloc(1, sizeof(struct exa_pixmap_priv));
     if (NULL == priv)
     {
         return NULL;
@@ -166,7 +166,7 @@ void LS_DestroyExaPixmap(ScreenPtr pScreen, void *driverPriv)
     // ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     // modesettingPtr ms = loongsonPTR(pScrn);
 
-    struct ms_exa_pixmap_priv *priv = (struct ms_exa_pixmap_priv *)driverPriv;
+    struct exa_pixmap_priv *priv = (struct exa_pixmap_priv *)driverPriv;
 
     // struct LoongsonBuf * pBuf = &priv->buf;
 
@@ -201,12 +201,9 @@ void *LS_CreateDumbPixmap(ScreenPtr pScreen,
                           int *new_fb_pitch)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ls = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ls->drmmode;
-    /* int prime_fd; */
-    /* int ret; */
-
-    struct ms_exa_pixmap_priv *priv = calloc(1, sizeof(struct ms_exa_pixmap_priv));
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    struct exa_pixmap_priv *priv = calloc(1, sizeof(struct exa_pixmap_priv));
 
     if (NULL == priv)
     {
@@ -221,20 +218,18 @@ void *LS_CreateDumbPixmap(ScreenPtr pScreen,
     }
 
     priv->bo = dumb_bo_create(pDrmMode->fd, width, height, bitsPerPixel);
-
     if (NULL == priv->bo)
     {
         free(priv);
 
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "failed to allocate %dx%d bo\n", width, height);
+                   "failed to allocate %dx%d bo\n", width, height);
 
         return NULL;
     }
 
     priv->owned = TRUE;
     priv->is_dumb = TRUE;
-
     priv->pitch = priv->bo->pitch;
 
     if (new_fb_pitch)
@@ -250,14 +245,14 @@ void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    struct ms_exa_pixmap_priv *priv = (struct ms_exa_pixmap_priv *)driverPriv;
+    struct exa_pixmap_priv *priv = (struct exa_pixmap_priv *)driverPriv;
 
     if (priv->fd > 0)
     {
         close(priv->fd);
     }
 
-    if ((priv->owned == TRUE) && (priv->bo != NULL))
+    if ((priv->is_dumb == TRUE) && (priv->bo != NULL))
     {
         dumb_bo_destroy(lsp->drmmode.fd, priv->bo);
 

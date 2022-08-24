@@ -134,9 +134,6 @@ typedef struct LoongsonRec *loongsonPtr;
 
 #define loongsonPTR(p)    ((loongsonPtr)((p)->driverPrivate))
 
-#define glamor_finish(screen) ms->glamor.finish(screen)
-
-
 xf86CrtcPtr ms_dri2_crtc_covering_drawable(DrawablePtr pDraw);
 
 int ms_get_crtc_ust_msc(xf86CrtcPtr crtc, CARD64 *ust, CARD64 *msc);

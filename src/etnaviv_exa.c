@@ -37,7 +37,7 @@
 #include "driver.h"
 #include "dumb_bo.h"
 
-#include "fake_exa.h"
+#include "etnaviv_exa.h"
 #include "loongson_buffer.h"
 #include "loongson_options.h"
 #include "loongson_pixmap.h"
@@ -399,25 +399,13 @@ static void ms_exa_wait_marker(ScreenPtr pScreen, int marker)
     // TODO:
 }
 
-/**
- * WaitMarker() waits for all rendering before the given marker to have
- * completed.  If the driver does not implement MarkSync(), marker is
- * meaningless, and all rendering by the hardware should be completed before
- * WaitMarker() returns.
- *
- * Note that drivers should call exaWaitSync() to wait for all acceleration
- * to finish, as otherwise EXA will be unaware of the driver having
- * synchronized, resulting in excessive WaitMarker() calls.
- *
- * WaitMarker() is required of all drivers.
- */
+
+
 static int ms_exa_mark_sync(ScreenPtr pScreen)
 {
     // TODO: return latest request(marker).
     return 0;
 }
-
-
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -584,7 +572,7 @@ static Bool ms_exa_back_pixmap_from_fd(PixmapPtr pixmap,
 //                  this guy do the real necessary initial job
 ////////////////////////////////////////////////////////////////////////////////
 
-Bool ls_setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
+Bool etnaviv_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
@@ -627,33 +615,14 @@ Bool ls_setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     // pExaDrv->DownloadFromScreen = ms_exa_download_from_screen;
 
     pExaDrv->WaitMarker = ms_exa_wait_marker;
-    // pExaDrv->MarkSync = ms_exa_mark_sync;
+    pExaDrv->MarkSync = ms_exa_mark_sync;
     pExaDrv->DestroyPixmap = ms_exa_destroy_pixmap;
     pExaDrv->CreatePixmap2 = ms_exa_create_pixmap2;
     pExaDrv->PrepareAccess = ls_exa_prepare_access;
     pExaDrv->FinishAccess = ls_exa_finish_access;
     pExaDrv->PixmapIsOffscreen = ms_exa_pixmap_is_offscreen;
 
-
-    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
-    {
-        /* Always fallback for software operations */
-        pExaDrv->PrepareCopy = PrepareCopyFail;
-        pExaDrv->PrepareSolid = PrepareSolidFail;
-        pExaDrv->CheckComposite = CheckCompositeFail;
-        pExaDrv->PrepareComposite = PrepareCompositeFail;
-    }
-
-    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
-    {
-        /* Always fallback for software operations */
-        pExaDrv->PrepareCopy = PrepareCopyFail;
-        pExaDrv->PrepareSolid = PrepareSolidFail;
-        pExaDrv->CheckComposite = CheckCompositeFail;
-        pExaDrv->PrepareComposite = PrepareCompositeFail;
-    }
-
-    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
+    if (1)
     {
         /* Always fallback for software operations */
         pExaDrv->PrepareCopy = PrepareCopyFail;

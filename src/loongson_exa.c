@@ -38,13 +38,14 @@
 #include "driver.h"
 #include "dumb_bo.h"
 
-#include "fake_exa.h"
 
-#include "loongson_exa.h"
 #include "loongson_options.h"
 #include "loongson_pixmap.h"
 #include "loongson_debug.h"
+#include "loongson_exa.h"
 
+#include "fake_exa.h"
+#include "etnaviv_exa.h"
 
 static void print_pixmap(PixmapPtr pPixmap)
 {
@@ -60,9 +61,9 @@ static void print_pixmap(PixmapPtr pPixmap)
 
 void ms_exa_exchange_buffers(PixmapPtr front, PixmapPtr back)
 {
-    struct ms_exa_pixmap_priv *front_priv = exaGetPixmapDriverPrivate(front);
-    struct ms_exa_pixmap_priv *back_priv = exaGetPixmapDriverPrivate(back);
-    struct ms_exa_pixmap_priv tmp_priv;
+    struct exa_pixmap_priv *front_priv = exaGetPixmapDriverPrivate(front);
+    struct exa_pixmap_priv *back_priv = exaGetPixmapDriverPrivate(back);
+    struct exa_pixmap_priv tmp_priv;
 
     tmp_priv = *front_priv;
     *front_priv = *back_priv;
@@ -75,7 +76,7 @@ void ms_exa_exchange_buffers(PixmapPtr front, PixmapPtr back)
  */
 struct dumb_bo *dumb_bo_from_pixmap(ScreenPtr pScreen, PixmapPtr pPixmap)
 {
-    struct ms_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
 
@@ -116,7 +117,7 @@ Bool ls_exa_set_pixmap_bo(ScrnInfoPtr pScrn,
                           struct dumb_bo *bo,
                           Bool owned)
 {
-    struct ms_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
     struct LoongsonRec *lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     int prime_fd;
@@ -164,7 +165,7 @@ int ms_exa_shareable_fd_from_pixmap(ScreenPtr pScreen,
                                     CARD16 *stride,
                                     CARD32 *size)
 {
-    struct ms_exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pixmap);
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pixmap);
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr ls = loongsonPTR(pScrn);
 
@@ -188,6 +189,7 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     ExaDriverPtr pExaDrv = exaDriverAlloc();
     if (pExaDrv == NULL)
@@ -195,10 +197,31 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: Initializing EXA.\n", __func__);
 
-    if (ls_setup_fake_exa(pScrn, pExaDrv) == FALSE)
+    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
     {
-        free(pExaDrv);
-        return FALSE;
+        if (ls_setup_fake_exa(pScrn, pExaDrv) == FALSE)
+        {
+            free(pExaDrv);
+            return FALSE;
+        }
+    }
+
+    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
+    {
+        if (etnaviv_setup_exa(pScrn, pExaDrv) == FALSE)
+        {
+            free(pExaDrv);
+            return FALSE;
+        }
+    }
+
+    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
+    {
+        if (ls_setup_fake_exa(pScrn, pExaDrv) == FALSE)
+        {
+            free(pExaDrv);
+            return FALSE;
+        }
     }
 
     // exaDriverInit sets up EXA given a driver record filled in by the driver.
@@ -265,7 +288,7 @@ Bool try_enable_exa(ScrnInfoPtr pScrn)
 
     xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
                "EXA method: %s\n", accel_method_str);
- 
+
     if (do_exa)
     {
         const char *pExaType2D = NULL;
