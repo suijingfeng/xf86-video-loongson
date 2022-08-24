@@ -56,15 +56,13 @@
 #endif
 #include "driver.h"
 
-#include "fake_exa.h"
-
 #include "loongson_options.h"
 #include "loongson_debug.h"
 #include "loongson_helpers.h"
 #include "loongson_cursor.h"
 #include "loongson_shadow.h"
 #include "loongson_entity.h"
-
+#include "loongson_exa.h"
 #include "loongson_glamor.h"
 #include "loongson_scanout.h"
 #include "loongson_prime.h"

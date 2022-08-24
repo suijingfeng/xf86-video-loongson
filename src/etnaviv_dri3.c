@@ -200,7 +200,7 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
         return NullPixmap;
     }
 
-    ret = ms_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
+    ret = ls_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
     if (ret == FALSE)
     {
         pScreen->DestroyPixmap(pPixmap);

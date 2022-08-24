@@ -40,6 +40,7 @@
 #include "dumb_bo.h"
 #include "drmmode_display.h"
 #include "loongson_prime.h"
+#include "loongson_exa.h"
 
 /* OUTPUT SLAVE SUPPORT */
 static Bool SetSlaveBO(PixmapPtr ppix,
@@ -234,7 +235,7 @@ Bool LS_SharePixmapBacking(PixmapPtr pPix, ScreenPtr slave, void **handle)
 
     if (pDrmMode->exa_enabled)
     {
-        ret = ms_exa_shareable_fd_from_pixmap(pScreen, pPix, &stride, &size);
+        ret = ls_exa_shareable_fd_from_pixmap(pScreen, pPix, &stride, &size);
         if (ret == -1)
         {
             return FALSE;

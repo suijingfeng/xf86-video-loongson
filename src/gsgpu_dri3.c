@@ -202,7 +202,7 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
         return NULL;
     }
 
-    ret = ms_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
+    ret = ls_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
     if (ret == FALSE)
     {
         pScreen->DestroyPixmap(pPixmap);

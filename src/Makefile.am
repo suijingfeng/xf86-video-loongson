@@ -63,6 +63,8 @@ loongson_drv_la_SOURCES = \
 	 gsgpu_dri3.c \
 	 fake_exa.c \
 	 fake_exa.h \
+	 loongson_exa.c \
+	 loongson_exa.h \
 	 loongson_buffer.h \
 	 loongson_buffer.c \
 	 loongson_pixmap.h \

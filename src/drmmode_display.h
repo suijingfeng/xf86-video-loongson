@@ -38,7 +38,7 @@
 
 #include <exa.h>
 #include "dumb_bo.h"
-#include "fake_exa.h"
+#include "loongson_exa.h"
 
 struct gbm_device;
 

@@ -1551,7 +1551,7 @@ static PixmapPtr drmmode_shadow_create(xf86CrtcPtr crtc,
     {
         drmmode_bo *rotate_bo = &drmmode_crtc->rotate_bo;
         xf86DrvMsg(pScrn->scrnIndex, X_INFO, "exa: %s\n", __func__);
-        ms_exa_set_pixmap_bo(pScrn, rotate_pixmap, rotate_bo->dumb, FALSE);
+        ls_exa_set_pixmap_bo(pScrn, rotate_pixmap, rotate_bo->dumb, FALSE);
     }
 
 #ifdef GLAMOR_HAS_GBM

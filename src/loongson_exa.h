@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright © 2022 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,11 +24,36 @@
  *    Sui Jingfeng <suijingfeng@loongson.cn>
  */
 
-#ifndef FAKE_EXA_H_
-#define FAKE_EXA_H_
 
-#include <xf86.h>
+#ifndef LOONGSON_EXA_H_
+#define LOONGSON_EXA_H_
 
-Bool ls_setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv);
+#include "dumb_bo.h"
+
+enum ExaAccelType {
+    EXA_ACCEL_TYPE_NONE = 0,
+    EXA_ACCEL_TYPE_FAKE = 1,
+    EXA_ACCEL_TYPE_SOFTWARE = 2,
+    EXA_ACCEL_TYPE_VIVANTE = 3,
+    EXA_ACCEL_TYPE_ETNAVIV = 4,
+    EXA_ACCEL_TYPE_GSGPU = 5
+};
+
+Bool LS_InitExaLayer(ScreenPtr pScreen);
+Bool LS_DestroyExaLayer(ScreenPtr pScreen);
+
+Bool try_enable_exa(ScrnInfoPtr pScrn);
+
+struct dumb_bo *dumb_bo_from_pixmap(ScreenPtr screen,
+                                    PixmapPtr pixmap);
+Bool ls_exa_set_pixmap_bo(ScrnInfoPtr scrn,
+                          PixmapPtr pPixmap,
+                          struct dumb_bo *bo,
+                          Bool owned);
+
+int ls_exa_shareable_fd_from_pixmap(ScreenPtr screen,
+              PixmapPtr pixmap, CARD16 *stride, CARD32 *size);
+
+void ms_exa_exchange_buffers(PixmapPtr front, PixmapPtr back);
 
 #endif
