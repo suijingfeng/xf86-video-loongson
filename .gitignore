@@ -23,7 +23,6 @@ m4
 *.la
 *.lo
 *.orig
-*.rej
 *.swp
 tags
 *~
