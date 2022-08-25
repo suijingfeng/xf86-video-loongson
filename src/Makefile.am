@@ -25,16 +25,20 @@
 # _ladir passes a dummy rpath to libtool so the thing will actually link
 # TODO: -nostdlib/-Bstatic/-lgcc platform magic, not installing the .a, etc.
 
-loongson_drv_la_LIBADD = $(LIBDRM_LIBS)
+loongson_drv_la_LIBADD = $(LIBDRM_LIBS) $(LIBDRM_ETNAVIV_LIBS)
 
-AM_CFLAGS = $(DIX_CFLAGS) $(XORG_CFLAGS) $(LIBDRM_CFLAGS) $(LIBUDEV_CFLAGS) $(CWARNFLAGS)
+AM_CFLAGS = @XORG_CFLAGS@ \
+            @LIBDRM_CFLAGS@ \
+            @LIBDRM_ETNAVIV_CFLAGS@ \
+            @LIBUDEV_CFLAGS@ \
+            @CWARNFLAGS@
 
 if LIBUDEV
 loongson_drv_la_LIBADD += $(LIBUDEV_LIBS)
 endif
 
 loongson_drv_la_LTLIBRARIES = loongson_drv.la
-loongson_drv_la_LDFLAGS = -module -avoid-version
+loongson_drv_la_LDFLAGS = -module -avoid-version -no-undefined
 loongson_drv_ladir = @moduledir@/drivers
 
 loongson_drv_la_SOURCES = \

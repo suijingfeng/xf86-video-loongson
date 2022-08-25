@@ -73,7 +73,7 @@ XORG_DRIVER_CHECK_EXT(DPMSExtension, xextproto)
 
 # Checks for libraries.
 PKG_CHECK_MODULES(LIBDRM, [libdrm >= 2.4.89])
-# PKG_CHECK_MODULES(LIBDRM_ETNAVIV, [libdrm_etnaviv >= 2.4.91])
+PKG_CHECK_MODULES(LIBDRM_ETNAVIV, [libdrm_etnaviv >= 2.4.91])
 PKG_CHECK_MODULES(GBM, [gbm])
 
 # Obtain compiler/linker options for the driver dependencies
