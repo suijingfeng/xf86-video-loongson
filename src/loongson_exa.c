@@ -46,6 +46,7 @@
 
 #include "fake_exa.h"
 #include "etnaviv_exa.h"
+#include "gsgpu_exa.h"
 
 static void print_pixmap(PixmapPtr pPixmap)
 {
@@ -194,11 +195,11 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
     if (pExaDrv == NULL)
         return FALSE;
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: Initializing EXA.\n", __func__);
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Initializing Fake EXA\n");
 
     if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
     {
-        if (ls_setup_fake_exa(pScrn, pExaDrv) == FALSE)
+        if (setup_fake_exa(pScrn, pExaDrv) == FALSE)
         {
             free(pExaDrv);
             return FALSE;
@@ -216,7 +217,7 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
 
     if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
     {
-        if (ls_setup_fake_exa(pScrn, pExaDrv) == FALSE)
+        if (gsgpu_setup_exa(pScrn, pExaDrv) == FALSE)
         {
             free(pExaDrv);
             return FALSE;

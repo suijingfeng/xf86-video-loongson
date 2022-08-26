@@ -24,11 +24,11 @@
  *    Sui Jingfeng <suijingfeng@loongson.cn>
  */
 
-#ifndef FAKE_EXA_H_
-#define FAKE_EXA_H_
+#ifndef GSGPU_EXA_H_
+#define GSGPU_EXA_H_
 
 #include <xf86.h>
 
-Bool setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv);
+Bool gsgpu_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv);
 
 #endif

@@ -37,7 +37,7 @@
 #include "driver.h"
 #include "dumb_bo.h"
 
-#include "fake_exa.h"
+#include "gsgpu_exa.h"
 #include "loongson_buffer.h"
 #include "loongson_options.h"
 #include "loongson_pixmap.h"
@@ -556,7 +556,7 @@ static Bool ms_exa_back_pixmap_from_fd(PixmapPtr pixmap,
 //                  this guy do the real necessary initial job
 ////////////////////////////////////////////////////////////////////////////////
 
-Bool setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
+Bool gsgpu_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
@@ -607,7 +607,7 @@ Bool setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->PixmapIsOffscreen = fake_exa_pixmap_is_offscreen;
 
 
-    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
+    if (1)
     {
         /* Always fallback for software operations */
         pExaDrv->PrepareCopy = PrepareCopyFail;

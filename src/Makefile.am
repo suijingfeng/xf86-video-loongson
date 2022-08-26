@@ -63,12 +63,14 @@ loongson_drv_la_SOURCES = \
 	 sprite.h \
 	 sprite.c \
 	 dri3.c \
-	 etnaviv_dri3.c \
-	 gsgpu_dri3.c \
-	 etnaviv_exa.c \
-	 etnaviv_exa.h \
 	 fake_exa.c \
 	 fake_exa.h \
+	 etnaviv_dri3.c \
+	 etnaviv_exa.c \
+	 etnaviv_exa.h \
+	 gsgpu_dri3.c \
+	 gsgpu_exa.c \
+	 gsgpu_exa.h \
 	 loongson_exa.c \
 	 loongson_exa.h \
 	 loongson_buffer.h \
