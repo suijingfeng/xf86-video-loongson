@@ -114,7 +114,7 @@ struct LoongsonRec {
 
     /* EXA API */
     ExaDriverPtr exaDrvPtr;
-    struct EtnavivRec etna;
+    struct EtnavivRec etnaviv;
 
     /* shadow API */
     struct ShadowAPI {

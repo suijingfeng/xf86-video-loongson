@@ -187,7 +187,6 @@ static Bool ls_exa_prepare_access(PixmapPtr pPix, int index)
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    // struct EtnavivRec *pGpu = &lsp->etna;
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
     void *ptr = NULL;
 
@@ -461,14 +460,12 @@ ms_exa_download_from_screen(PixmapPtr pSrc, int x, int y, int w, int h,
 */
 
 
-static void ms_exa_wait_marker(ScreenPtr pScreen, int marker)
+static void etnaviv_exa_wait_marker(ScreenPtr pScreen, int marker)
 {
     // TODO:
 }
 
-
-
-static int ms_exa_mark_sync(ScreenPtr pScreen)
+static int etnaviv_exa_mark_sync(ScreenPtr pScreen)
 {
     // TODO: return latest request(marker).
     return 0;
@@ -487,7 +484,7 @@ static void *etnaviv_create_pixmap(ScreenPtr pScreen,
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    struct EtnavivRec *etnaviv = &lsp->etna;
+    struct EtnavivRec *etnaviv = &lsp->etnaviv;
     struct exa_pixmap_priv *priv;
     struct etna_bo *etna_bo;
     unsigned pitch, size;
@@ -529,7 +526,6 @@ static void *etnaviv_create_pixmap(ScreenPtr pScreen,
     }
 
     priv->pitch = pitch;
-
 
     return priv;
 }
@@ -792,57 +788,56 @@ static int etnaviv_report_features(ScrnInfoPtr pScrn,
 Bool etnaviv_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
-    // struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
-{
-    struct EtnavivRec *pGpu = &lsp->etna;
-    struct etna_device *dev;
-    struct etna_gpu *gpu;
-    struct etna_pipe *pipe;
-    struct etna_cmd_stream *stream;
-    uint64_t model, revision;
-    int fd;
-
-    fd = drmOpenWithType("etnaviv", NULL, DRM_NODE_PRIMARY);
-    if (fd != -1)
     {
-        drmVersionPtr version = drmGetVersion(fd);
-        if (version)
+        struct EtnavivRec *pGpu = &lsp->etnaviv;
+        struct etna_device *dev;
+        struct etna_gpu *gpu;
+        struct etna_pipe *pipe;
+        struct etna_cmd_stream *stream;
+        uint64_t model, revision;
+        int fd;
+
+        fd = drmOpenWithType("etnaviv", NULL, DRM_NODE_PRIMARY);
+        if (fd != -1)
         {
-            xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Version: %d.%d.%d\n",
-                       version->version_major, version->version_minor,
-                       version->version_patchlevel);
-            xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Name: %s\n", version->name);
-            xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Date: %s\n", version->date);
-            xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Description: %s\n", version->desc);
-            drmFreeVersion(version);
+            drmVersionPtr version = drmGetVersion(fd);
+            if (version)
+            {
+                xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Version: %d.%d.%d\n",
+                           version->version_major, version->version_minor,
+                           version->version_patchlevel);
+                xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Name: %s\n", version->name);
+                xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Date: %s\n", version->date);
+                xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Description: %s\n", version->desc);
+                drmFreeVersion(version);
+            }
         }
+
+        dev = etna_device_new(fd);
+
+        /* we assume that core 0 is a 2D capable one */
+        gpu = etna_gpu_new(dev, 0);
+        pipe = etna_pipe_new(gpu, ETNA_PIPE_2D);
+
+        stream = etna_cmd_stream_new(pipe, VIV2D_STREAM_SIZE, NULL, NULL);
+
+        pGpu->fd = fd;
+        pGpu->dev = dev;
+        pGpu->gpu = gpu;
+        pGpu->pipe = pipe;
+        pGpu->stream = stream;
+
+        etna_gpu_get_param(gpu, ETNA_GPU_MODEL, &model);
+        etna_gpu_get_param(gpu, ETNA_GPU_REVISION, &revision);
+
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "EXA: Vivante GC%x GPU revision %x found!\n",
+                   (uint32_t)model, (uint32_t)revision);
+
+        etnaviv_report_features(pScrn, gpu, pGpu);
+
     }
-
-    dev = etna_device_new(fd);
-
-    /* we assume that core 0 is a 2D capable one */
-    gpu = etna_gpu_new(dev, 0);
-    pipe = etna_pipe_new(gpu, ETNA_PIPE_2D);
-
-    stream = etna_cmd_stream_new(pipe, VIV2D_STREAM_SIZE, NULL, NULL);
-
-    pGpu->fd = fd;
-    pGpu->dev = dev;
-    pGpu->gpu = gpu;
-    pGpu->pipe = pipe;
-    pGpu->stream = stream;
-
-    etna_gpu_get_param(gpu, ETNA_GPU_MODEL, &model);
-    etna_gpu_get_param(gpu, ETNA_GPU_REVISION, &revision);
-
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-               "EXA: Vivante GC%x GPU revision %x found!",
-               (uint32_t)model, (uint32_t)revision);
-
-    etnaviv_report_features(pScrn, gpu, pGpu);
-
-}
 
     TRACE_ENTER();
 
@@ -876,13 +871,12 @@ Bool etnaviv_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->Composite = ms_exa_composite;
     pExaDrv->DoneComposite = ms_exa_composite_done;
 
-
     /* TODO: Impl upload/download */
     // pExaDrv->UploadToScreen = ms_exa_upload_to_screen;
     // pExaDrv->DownloadFromScreen = ms_exa_download_from_screen;
 
-    pExaDrv->WaitMarker = ms_exa_wait_marker;
-    pExaDrv->MarkSync = ms_exa_mark_sync;
+    pExaDrv->WaitMarker = etnaviv_exa_wait_marker;
+    pExaDrv->MarkSync = etnaviv_exa_mark_sync;
     pExaDrv->DestroyPixmap = ls_exa_destroy_pixmap;
     pExaDrv->CreatePixmap2 = ls_exa_create_pixmap2;
     pExaDrv->PrepareAccess = ls_exa_prepare_access;

@@ -115,7 +115,9 @@ struct drmmode_rec {
     Bool shadow_enable;
     Bool shadow_enable2;
 
-
+#ifdef DRI3
+    char *dri3_device_name;
+#endif
     /** Is Option "PageFlip" enabled? */
     Bool pageflip;
     void *shadow_fb;
@@ -130,10 +132,6 @@ struct drmmode_rec {
     Bool is_lsdc;
 
     PixmapPtr fbcon_pixmap;
-
-#ifdef DRI3
-    char *dri3_device_name;
-#endif
 
     Bool dri2_flipping;
     Bool present_flipping;

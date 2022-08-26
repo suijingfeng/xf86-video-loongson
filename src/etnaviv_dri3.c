@@ -7,22 +7,15 @@
 #include "config.h"
 #endif
 
-#ifdef HAVE_DIX_CONFIG_H
-#include "dix-config.h"
-#endif
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include <unistd.h>
 #include <fcntl.h>
-#include <drm_fourcc.h>
 #include <sys/stat.h>
 
 #include <xf86.h>
 #include <dri3.h>
 #include <misyncshm.h>
+#include <xf86drm.h>
+#include <etnaviv_drmif.h>
 
 #include "driver.h"
 #include "etnaviv_dri3.h"
@@ -30,7 +23,7 @@
 #include "loongson_pixmap.h"
 
 
-static Bool etnaviv_dri3_authorise(struct drmmode_rec * const pDrmmode, int fd)
+static Bool etnaviv_dri3_authorise(struct EtnavivRec *pGpu, int fd)
 {
     struct stat st;
     drm_magic_t magic;
@@ -78,7 +71,7 @@ static Bool etnaviv_dri3_authorise(struct drmmode_rec * const pDrmmode, int fd)
         }
     }
 
-    ret = drmAuthMagic(pDrmmode->fd, magic);
+    ret = drmAuthMagic(pGpu->fd, magic);
     if (ret < 0)
     {
         close(fd);
@@ -93,22 +86,21 @@ static int etnaviv_dri3_open(ScreenPtr pScreen, RRProviderPtr provider, int *o)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmmode = &lsp->drmmode;
+    struct EtnavivRec *pGpu = &lsp->etnaviv;
     int fd;
 
     TRACE_ENTER();
 
-    fd = open(pDrmmode->dri3_device_name, O_RDWR | O_CLOEXEC);
+    fd = open(pGpu->render_node, O_RDWR | O_CLOEXEC);
     if (fd < 0)
     {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                   "DRI3: cannot open %s.\n",
-                   pDrmmode->dri3_device_name);
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "DRI3: cannot open %s\n",
+                   pGpu->render_node);
 
         return BadAlloc;
     }
 
-    if (!etnaviv_dri3_authorise(pDrmmode, fd))
+    if (!etnaviv_dri3_authorise(pGpu, fd))
     {
         close(fd);
         return BadMatch;
@@ -163,8 +155,7 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    struct EtnavivRec *gpu = &lsp->etna;
-    struct drmmode_rec * const pDrmmode = &lsp->drmmode;
+    struct EtnavivRec *gpu = &lsp->etnaviv;
     struct etna_bo *bo = NULL;
     struct exa_pixmap_priv *priv = NULL;
     PixmapPtr pPixmap = NULL;
@@ -242,22 +233,42 @@ static int etnaviv_dri3_fd_from_pixmap(ScreenPtr pScreen,
 }
 */
 
+static struct etna_bo *
+etna_bo_from_pixmap(ScreenPtr pScreen, PixmapPtr pPixmap)
+{
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+
+    if (priv == NULL)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                "%s: priv is NULL\n", __func__);
+        return NULL;
+    }
+
+    if (lsp->exaDrvPtr == NULL)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                "%s: exaDrvPtr is NULL\n", __func__);
+        return NULL;
+    }
+
+    return priv->etna_bo;
+}
+
 static int etnaviv_dri3_fd_from_pixmap(ScreenPtr pScreen,
-                                       PixmapPtr pixmap,
+                                       PixmapPtr pPixmap,
                                        CARD16 *stride,
                                        CARD32 *size)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct EtnavivRec *gpu = &lsp->etna;
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    struct dumb_bo *bo;
+    struct etna_bo *bo;
     int prime_fd;
-    int ret;
 
     TRACE_ENTER();
 
-    bo = dumb_bo_from_pixmap(pScreen, pixmap);
+    bo = etna_bo_from_pixmap(pScreen, pPixmap);
     if (bo == NULL)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -265,21 +276,14 @@ static int etnaviv_dri3_fd_from_pixmap(ScreenPtr pScreen,
         return -1;
     }
 
-    ret = drmPrimeHandleToFD(pDrmMode->fd, bo->handle, DRM_CLOEXEC, &prime_fd);
-    if (ret)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                   "dri3: failed to get dmabuf fd: %d\n", ret);
-        return ret;
-    }
+    prime_fd = etna_bo_dmabuf(bo);
 
-    *stride = bo->pitch;
-    *size = bo->size;
+    *stride = pPixmap->devKind;
+    *size = etna_bo_size(bo);
 
     TRACE_EXIT();
 
     return prime_fd;
-
 }
 
 static dri3_screen_info_rec etnaviv_dri3_info = {
@@ -294,18 +298,15 @@ Bool etnaviv_dri3_ScreenInit(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    struct EtnavivRec *gpu = &lsp->etna;
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    struct EtnavivRec *gpu = &lsp->etnaviv;
     int fd;
 
     TRACE_ENTER();
 
-    pDrmMode->dri3_device_name = NULL;
-
     if (!miSyncShmScreenInit(pScreen))
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "Failed to initialize sync support.\n");
+                   "Failed to initialize sync support.\n");
         return FALSE;
     }
 
@@ -325,12 +326,11 @@ Bool etnaviv_dri3_ScreenInit(ScreenPtr pScreen)
             drmFreeVersion(version);
         }
 
-        pDrmMode->dri3_device_name = drmGetDeviceNameFromFd2(fd);
         gpu->render_node = drmGetDeviceNameFromFd2(fd);
         drmClose(fd);
     }
 
-    if (pDrmMode->dri3_device_name == NULL)
+    if (gpu->render_node == NULL)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_INFO,
                    "DRI3: failed to open renderer node\n");
@@ -339,9 +339,8 @@ Bool etnaviv_dri3_ScreenInit(ScreenPtr pScreen)
     }
     else
     {
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "DRI3: renderer node name: %s\n",
-                   pDrmMode->dri3_device_name);
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "DRI3: renderer node: %s\n",
+                   gpu->render_node);
     }
 
     TRACE_EXIT();
