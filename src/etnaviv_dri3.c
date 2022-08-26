@@ -27,6 +27,8 @@
 #include "driver.h"
 #include "etnaviv_dri3.h"
 #include "loongson_debug.h"
+#include "loongson_pixmap.h"
+
 
 static Bool etnaviv_dri3_authorise(struct drmmode_rec * const pDrmmode, int fd)
 {
@@ -161,9 +163,11 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
+    struct EtnavivRec *gpu = &lsp->etna;
     struct drmmode_rec * const pDrmmode = &lsp->drmmode;
-    struct dumb_bo *bo = NULL;
-    PixmapPtr pPixmap;
+    struct etna_bo *bo = NULL;
+    struct exa_pixmap_priv *priv = NULL;
+    PixmapPtr pPixmap = NULL;
     Bool ret;
 
     TRACE_ENTER();
@@ -189,8 +193,10 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
     }
 
     /* pDrmmode->fd or GPU fd ? */
-    bo = dumb_get_bo_from_fd(pDrmmode->fd, fd, stride, stride * height);
-    if (NULL == bo)
+
+    bo = etna_bo_from_dmabuf(gpu->dev, fd);
+    // bo = dumb_get_bo_from_fd(pDrmmode->fd, fd, stride, stride * height);
+    if (!bo)
     {
         pScreen->DestroyPixmap(pPixmap);
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -200,14 +206,18 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
         return NullPixmap;
     }
 
-    ret = ls_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
-    if (ret == FALSE)
-    {
-        pScreen->DestroyPixmap(pPixmap);
-        dumb_bo_destroy(pDrmmode->fd, bo);
+    // ret = ls_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
+    priv = exaGetPixmapDriverPrivate(pPixmap);
 
-        return NullPixmap;
-    }
+    priv->etna_bo = bo;
+    priv->fd = fd;
+    priv->pitch = stride;
+    priv->owned = TRUE;
+    priv->width = width;
+    priv->height = height;
+
+    pPixmap->devPrivate.ptr = NULL;
+    pPixmap->devKind = stride;
 
     return pPixmap;
 }
@@ -239,6 +249,7 @@ static int etnaviv_dri3_fd_from_pixmap(ScreenPtr pScreen,
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
+    struct EtnavivRec *gpu = &lsp->etna;
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     struct dumb_bo *bo;
     int prime_fd;
@@ -283,6 +294,7 @@ Bool etnaviv_dri3_ScreenInit(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
+    struct EtnavivRec *gpu = &lsp->etna;
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     int fd;
 
@@ -314,7 +326,7 @@ Bool etnaviv_dri3_ScreenInit(ScreenPtr pScreen)
         }
 
         pDrmMode->dri3_device_name = drmGetDeviceNameFromFd2(fd);
-
+        gpu->render_node = drmGetDeviceNameFromFd2(fd);
         drmClose(fd);
     }
 

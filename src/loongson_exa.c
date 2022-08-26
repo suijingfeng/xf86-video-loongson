@@ -190,7 +190,6 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-
     ExaDriverPtr pExaDrv = exaDriverAlloc();
     if (pExaDrv == NULL)
         return FALSE;

@@ -245,6 +245,7 @@ void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     struct exa_pixmap_priv *priv = (struct exa_pixmap_priv *)driverPriv;
 
     if (priv->fd > 0)
@@ -254,11 +255,9 @@ void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
 
     if ((priv->is_dumb == TRUE) && (priv->bo != NULL))
     {
-        dumb_bo_destroy(lsp->drmmode.fd, priv->bo);
+        dumb_bo_destroy(pDrmMode->fd, priv->bo);
 
-#ifdef FAKE_EXA_DEBUG
-        INFO_MSG("DestroyPixmap bo:%p", priv->bo);
-#endif
+        DEBUG_MSG("DestroyPixmap bo:%p", priv->bo);
     }
 
     free(priv);

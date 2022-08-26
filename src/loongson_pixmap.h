@@ -44,15 +44,18 @@
 struct exa_pixmap_priv {
     struct dumb_bo *bo;
     struct LoongsonBuf *pBuf;
+    struct etna_bo *etna_bo;
     int fd;
-    int refcnt;
-    int pitch;
     int usage_hint;
+    unsigned int pitch;
+    uint16_t width;
+    uint16_t height;
+    uint8_t state;
+
     Bool owned;
     Bool is_dumb;
     Bool mapped;
 };
-
 
 Bool LS_IsDumbPixmap(int usage_hint);
 

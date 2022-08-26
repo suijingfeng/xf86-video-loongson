@@ -46,7 +46,33 @@
 #endif
 
 #include "drmmode_display.h"
+#include "etnaviv_drmif.h"
 
+/* Enum with indices for each of the feature words */
+enum viv_features_word {
+   viv_chipFeatures = 0,
+   viv_chipMinorFeatures0 = 1,
+   viv_chipMinorFeatures1 = 2,
+   viv_chipMinorFeatures2 = 3,
+   viv_chipMinorFeatures3 = 4,
+   viv_chipMinorFeatures4 = 5,
+   viv_chipMinorFeatures5 = 6,
+   VIV_FEATURES_WORD_COUNT /* Must be last */
+};
+
+struct EtnavivRec {
+    int fd;
+    char *render_node;
+    struct etna_device *dev;
+    struct etna_gpu *gpu;
+    struct etna_pipe *pipe;
+    struct etna_cmd_stream *stream;
+    struct etna_bo *bo;
+
+    uint32_t model;
+    uint32_t revision;
+    uint32_t features[VIV_FEATURES_WORD_COUNT];
+};
 
 struct LoongsonRec {
     int fd;
@@ -88,6 +114,7 @@ struct LoongsonRec {
 
     /* EXA API */
     ExaDriverPtr exaDrvPtr;
+    struct EtnavivRec etna;
 
     /* shadow API */
     struct ShadowAPI {
