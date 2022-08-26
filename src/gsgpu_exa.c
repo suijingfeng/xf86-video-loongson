@@ -74,6 +74,48 @@ struct ms_exa_prepare_args {
 static struct ms_exa_prepare_args exa_prepare_args = {{0}};
 
 
+//
+// For pixmaps that are scanout, backing for windows or bigger than,
+// "accelerate" them by allocating them via GEM.
+//
+// For all other pixmaps where we never expect DRI2 CreateBuffer to
+// be called. We just malloc them, which turns out to be much faster.
+//
+// return TRUE if it is a dumb, return FALSE otherwise.
+
+static Bool gsgpu_is_dumb_pixmap(int usage_hint)
+{
+    if (usage_hint == CREATE_PIXMAP_USAGE_BACKING_PIXMAP)
+    {
+        return FALSE;
+    }
+
+    if (usage_hint == CREATE_PIXMAP_USAGE_SHARED)
+    {
+        return TRUE;
+    }
+
+    if (usage_hint == CREATE_PIXMAP_USAGE_GLYPH_PICTURE)
+    {
+        // TODO : debug this
+        // suijingfeng: bad looking if using dumb, strange !
+        return FALSE;
+    }
+
+    if (usage_hint == CREATE_PIXMAP_USAGE_SCRATCH)
+    {
+        return FALSE;
+    }
+
+    if (usage_hint == CREATE_PIXMAP_USAGE_SCANOUT)
+    {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+
 /**
  * PrepareAccess() is called before CPU access to an offscreen pixmap.
  *
@@ -135,7 +177,7 @@ static Bool fake_exa_prepare_access(PixmapPtr pPix, int index)
         return TRUE;
     }
 
-    if (LS_IsDumbPixmap(priv->usage_hint))
+    if (gsgpu_is_dumb_pixmap(priv->usage_hint))
     {
         ret = dumb_bo_map(pDrmMode->fd, priv->bo);
         if (ret)
@@ -421,7 +463,7 @@ static void fake_exa_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
 {
     struct exa_pixmap_priv *pPriv = (struct exa_pixmap_priv *) driverPriv;
 
-    if (LS_IsDumbPixmap(pPriv->usage_hint))
+    if (gsgpu_is_dumb_pixmap(pPriv->usage_hint))
     {
         LS_DestroyDumbPixmap(pScreen, driverPriv);
     }
@@ -438,7 +480,7 @@ static Bool ms_exa_modify_pixmap_header(PixmapPtr pPixmap,
 {
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
 
-    if ( LS_IsDumbPixmap(priv->usage_hint) )
+    if (gsgpu_is_dumb_pixmap(priv->usage_hint))
     {
         return LS_ModifyDumbPixmapHeader(pPixmap, width, height,
                 depth, bitsPerPixel, devKind, pPixData);
@@ -461,7 +503,7 @@ static void *fake_exa_create_pixmap2(ScreenPtr pScreen,
                                      int bitsPerPixel,
                                      int *new_fb_pitch)
 {
-    if (LS_IsDumbPixmap(usage_hint))
+    if (gsgpu_is_dumb_pixmap(usage_hint))
     {
         return LS_CreateDumbPixmap(pScreen, width, height, depth,
                                    usage_hint, bitsPerPixel, new_fb_pitch);
@@ -501,7 +543,7 @@ static Bool fake_exa_pixmap_is_offscreen(PixmapPtr pPixmap)
         return FALSE;
     }
 
-    if (LS_IsDumbPixmap(priv->usage_hint))
+    if (gsgpu_is_dumb_pixmap(priv->usage_hint))
     {
         return (priv->bo != NULL);
     }
@@ -576,7 +618,6 @@ Bool gsgpu_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->flags =
         EXA_HANDLES_PIXMAPS | EXA_SUPPORTS_PREPARE_AUX | EXA_OFFSCREEN_PIXMAPS;
 
-
     //// solid
     pExaDrv->PrepareSolid = ms_exa_prepare_solid;
     pExaDrv->Solid = ms_exa_solid;
@@ -593,7 +634,6 @@ Bool gsgpu_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->Composite = ms_exa_composite;
     pExaDrv->DoneComposite = ms_exa_composite_done;
 
-
     /* TODO: Impl upload/download */
     // pExaDrv->UploadToScreen = ms_exa_upload_to_screen;
     // pExaDrv->DownloadFromScreen = ms_exa_download_from_screen;
@@ -605,7 +645,6 @@ Bool gsgpu_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->PrepareAccess = fake_exa_prepare_access;
     pExaDrv->FinishAccess = fake_exa_finish_access;
     pExaDrv->PixmapIsOffscreen = fake_exa_pixmap_is_offscreen;
-
 
     if (1)
     {

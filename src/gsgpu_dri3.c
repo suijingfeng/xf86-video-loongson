@@ -166,7 +166,7 @@ static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
 
     /* width and height of 0 means don't allocate any pixmap data */
     pPixmap = pScreen->CreatePixmap(pScreen, 0, 0, depth,
-                                    CREATE_PIXMAP_USAGE_BACKING_PIXMAP);
+                                    CREATE_PIXMAP_USAGE_SHARED);
 
     if (pPixmap == NullPixmap)
     {
