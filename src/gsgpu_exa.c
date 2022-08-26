@@ -160,7 +160,7 @@ static Bool gsgpu_is_dumb_pixmap(int usage_hint)
  * DownloadFromScreen() to migate the pixmap out.
  */
 
-static Bool fake_exa_prepare_access(PixmapPtr pPix, int index)
+static Bool gsgpu_exa_prepare_access(PixmapPtr pPix, int index)
 {
     ScreenPtr pScreen = pPix->drawable.pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
@@ -209,7 +209,7 @@ static Bool fake_exa_prepare_access(PixmapPtr pPix, int index)
  * pixmap set up by PrepareAccess().  Note that the FinishAccess() will not be
  * called if PrepareAccess() failed and the pixmap was migrated out.
  */
-static void fake_exa_finish_access(PixmapPtr pPixmap, int index)
+static void gsgpu_exa_finish_access(PixmapPtr pPixmap, int index)
 {
 /*
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
@@ -280,9 +280,9 @@ static void ms_exa_solid(PixmapPtr pPixmap, int x1, int y1, int x2, int y2)
     ChangeGC(NullClient, gc, GCFunction | GCPlaneMask | GCForeground, val);
     ValidateGC(&pPixmap->drawable, gc);
 
-    fake_exa_prepare_access(pPixmap, 0);
+    gsgpu_exa_prepare_access(pPixmap, 0);
     fbFill(&pPixmap->drawable, gc, x1, y1, x2 - x1, y2 - y1);
-    fake_exa_finish_access(pPixmap, 0);
+    gsgpu_exa_finish_access(pPixmap, 0);
 
     FreeScratchGC(gc);
 }
@@ -327,14 +327,14 @@ static void ms_exa_copy(PixmapPtr pDstPixmap, int srcX, int srcY,
     ChangeGC(NullClient, gc, GCFunction | GCPlaneMask, val);
     ValidateGC(&pDstPixmap->drawable, gc);
 
-    fake_exa_prepare_access(pSrcPixmap, 0);
-    fake_exa_prepare_access(pDstPixmap, 0);
+    gsgpu_exa_prepare_access(pSrcPixmap, 0);
+    gsgpu_exa_prepare_access(pDstPixmap, 0);
 
     fbCopyArea(&pSrcPixmap->drawable, &pDstPixmap->drawable, gc,
                srcX, srcY, width, height, dstX, dstY);
 
-    fake_exa_finish_access(pDstPixmap, 0);
-    fake_exa_finish_access(pSrcPixmap, 0);
+    gsgpu_exa_finish_access(pDstPixmap, 0);
+    gsgpu_exa_finish_access(pSrcPixmap, 0);
 
     FreeScratchGC(gc);
 }
@@ -390,21 +390,21 @@ static void ms_exa_composite(PixmapPtr pDst, int srcX, int srcY,
 
     if (pMask)
     {
-        fake_exa_prepare_access(pMask, 0);
+        gsgpu_exa_prepare_access(pMask, 0);
     }
 
-    fake_exa_prepare_access(pSrc, 0);
-    fake_exa_prepare_access(pDst, 0);
+    gsgpu_exa_prepare_access(pSrc, 0);
+    gsgpu_exa_prepare_access(pDst, 0);
 
     fbComposite(op, pSrcPicture, pMaskPicture, pDstPicture,
                 srcX, srcY, maskX, maskY, dstX, dstY, width, height);
 
-    fake_exa_finish_access(pDst, 0);
-    fake_exa_finish_access(pSrc, 0);
+    gsgpu_exa_finish_access(pDst, 0);
+    gsgpu_exa_finish_access(pSrc, 0);
 
     if (pMask)
     {
-        fake_exa_finish_access(pMask, 0);
+        gsgpu_exa_finish_access(pMask, 0);
     }
 }
 
@@ -416,27 +416,30 @@ static void ms_exa_composite_done(PixmapPtr pPixmap)
 
 //////////////////////////////////////////////////////////////////////////
 
-
-/*
-
-static Bool
-ms_exa_upload_to_screen(PixmapPtr pDst, int x, int y, int w, int h,
-                        char *src, int src_pitch)
+static Bool gsgpu_exa_upload_to_screen(PixmapPtr pDst,
+                                       int x,
+                                       int y,
+                                       int w,
+                                       int h,
+                                       char *src,
+                                       int src_pitch)
 {
     return FALSE;
 }
 
-static Bool
-ms_exa_download_from_screen(PixmapPtr pSrc, int x, int y, int w, int h,
-                            char *dst, int dst_pitch)
+static Bool gsgpu_exa_download_from_screen(PixmapPtr pSrc,
+                                           int x,
+                                           int y,
+                                           int w,
+                                           int h,
+                                           char *dst,
+                                           int dst_pitch)
 {
     return FALSE;
 }
 
-*/
 
-
-static void fake_exa_wait_marker(ScreenPtr pScreen, int marker)
+static void gsgpu_exa_wait_marker(ScreenPtr pScreen, int marker)
 {
     // TODO:
 }
@@ -453,13 +456,13 @@ static void fake_exa_wait_marker(ScreenPtr pScreen, int marker)
  *
  * WaitMarker() is required of all drivers.
  */
-static int fake_exa_mark_sync(ScreenPtr pScreen)
+static int gsgpu_exa_mark_sync(ScreenPtr pScreen)
 {
     // TODO: return latest request(marker).
     return 0;
 }
 
-static void fake_exa_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
+static void gsgpu_exa_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
 {
     struct exa_pixmap_priv *pPriv = (struct exa_pixmap_priv *) driverPriv;
 
@@ -495,13 +498,13 @@ static Bool ms_exa_modify_pixmap_header(PixmapPtr pPixmap,
 
 /* Hooks to allow driver to its own pixmap memory management */
 
-static void *fake_exa_create_pixmap2(ScreenPtr pScreen,
-                                     int width,
-                                     int height,
-                                     int depth,
-                                     int usage_hint,
-                                     int bitsPerPixel,
-                                     int *new_fb_pitch)
+static void *gsgpu_exa_create_pixmap2(ScreenPtr pScreen,
+                                      int width,
+                                      int height,
+                                      int depth,
+                                      int usage_hint,
+                                      int bitsPerPixel,
+                                      int *new_fb_pitch)
 {
     if (gsgpu_is_dumb_pixmap(usage_hint))
     {
@@ -527,7 +530,7 @@ static void *fake_exa_create_pixmap2(ScreenPtr pScreen,
  * meaning that acceleration could probably be done to it, and that it will need
  * to be wrapped by PrepareAccess()/FinishAccess() when accessing it with the CPU.
  */
-static Bool fake_exa_pixmap_is_offscreen(PixmapPtr pPixmap)
+static Bool gsgpu_exa_pixmap_is_offscreen(PixmapPtr pPixmap)
 {
     //
     // offscreen means in 'gpu accessible memory', not that it's off the
@@ -553,50 +556,6 @@ static Bool fake_exa_pixmap_is_offscreen(PixmapPtr pPixmap)
     }
 }
 
-
-//////////////////////////////////////////////////////////////////////
-//   This two is for PRIME and Reverse Prime, not tested ...
-//////////////////////////////////////////////////////////////////////
-
-static Bool ms_exa_back_pixmap_from_fd(PixmapPtr pixmap,
-                                int fd,
-                                CARD16 width,
-                                CARD16 height,
-                                CARD16 stride,
-                                CARD8 depth,
-                                CARD8 bpp)
-{
-    ScreenPtr pScreen = pixmap->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    struct dumb_bo *bo;
-    Bool ret;
-
-    bo = dumb_get_bo_from_fd(pDrmMode->fd, fd, stride, stride * height);
-    if (!bo)
-    {
-        return FALSE;
-    }
-
-    pScreen->ModifyPixmapHeader(pixmap, width, height,
-                                depth, bpp, stride, NULL);
-
-    ret = ls_exa_set_pixmap_bo(pScrn, pixmap, bo, TRUE);
-    if (ret == FALSE)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                        "%s: ms_exa_set_pixmap_bo failed\n", __func__);
-
-        dumb_bo_destroy(pDrmMode->fd, bo);
-    }
-
-    return ret;
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-//                  this guy do the real necessary initial job
-////////////////////////////////////////////////////////////////////////////////
 
 Bool gsgpu_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 {
@@ -638,13 +597,13 @@ Bool gsgpu_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     // pExaDrv->UploadToScreen = ms_exa_upload_to_screen;
     // pExaDrv->DownloadFromScreen = ms_exa_download_from_screen;
 
-    pExaDrv->WaitMarker = fake_exa_wait_marker;
-    pExaDrv->MarkSync = fake_exa_mark_sync;
-    pExaDrv->DestroyPixmap = fake_exa_destroy_pixmap;
-    pExaDrv->CreatePixmap2 = fake_exa_create_pixmap2;
-    pExaDrv->PrepareAccess = fake_exa_prepare_access;
-    pExaDrv->FinishAccess = fake_exa_finish_access;
-    pExaDrv->PixmapIsOffscreen = fake_exa_pixmap_is_offscreen;
+    pExaDrv->WaitMarker = gsgpu_exa_wait_marker;
+    pExaDrv->MarkSync = gsgpu_exa_mark_sync;
+    pExaDrv->DestroyPixmap = gsgpu_exa_destroy_pixmap;
+    pExaDrv->CreatePixmap2 = gsgpu_exa_create_pixmap2;
+    pExaDrv->PrepareAccess = gsgpu_exa_prepare_access;
+    pExaDrv->FinishAccess = gsgpu_exa_finish_access;
+    pExaDrv->PixmapIsOffscreen = gsgpu_exa_pixmap_is_offscreen;
 
     if (1)
     {
