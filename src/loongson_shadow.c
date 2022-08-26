@@ -242,7 +242,6 @@ static void LS_ShadowUpdate32(ScreenPtr pScreen, shadowBufPtr pBuf)
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-
     RegionPtr damage = DamageRegion(pBuf->pDamage);
     PixmapPtr pShadow = pBuf->pPixmap;
     DrawablePtr pDrawable = &pShadow->drawable;

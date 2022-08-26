@@ -31,15 +31,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <xf86.h>
-
 #include <exa.h>
-#include <fbpict.h>
-
 #include <xf86drm.h>
 #include <etnaviv_drmif.h>
 
 #include "driver.h"
-#include "dumb_bo.h"
 
 #include "etnaviv_exa.h"
 #include "loongson_buffer.h"
