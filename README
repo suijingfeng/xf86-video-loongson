@@ -44,6 +44,12 @@ $ make -j4
 $ sudo make install
 
 
+# build if you don't have libdrm-gsgpu
+
+$ ./autogen.sh --prefix=/usr --disable-gsgpu
+$ make -j4
+$ sudo make install
+
 On x86 platform if you don't have libdrm-etnaviv and libdrm-gsgpu, build is still possible
 
 for example on ubuntu-20.04
