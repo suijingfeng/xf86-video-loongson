@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,21 +24,19 @@
  *    Sui Jingfeng <suijingfeng@loongson.cn>
  */
 
-
 #ifndef LOONGSON_GLAMOR_H_
 #define LOONGSON_GLAMOR_H_
 
 #include <xf86str.h>
-
 #include "drmmode_display.h"
 
 Bool try_enable_glamor(ScrnInfoPtr pScrn);
 
-Bool ls_glamor_create_gbm_bo(ScrnInfoPtr pScrn,
-                             drmmode_bo *bo,
-                             unsigned width,
-                             unsigned height,
-                             unsigned bpp);
+struct DrmModeBO *
+ls_glamor_create_gbm_bo(ScrnInfoPtr pScrn,
+                        unsigned width,
+                        unsigned height,
+                        unsigned bpp);
 
 Bool ls_glamor_init(ScrnInfoPtr pScrn);
 
@@ -46,9 +44,13 @@ Bool glamor_set_pixmap_bo(ScrnInfoPtr pScrn,
                           PixmapPtr pixmap,
                           drmmode_bo *bo);
 
+int ls_glamor_bo_import(drmmode_ptr drmmode,
+                        drmmode_bo *bo,
+                        uint32_t *fb_id);
 
 uint32_t get_opaque_format(uint32_t format);
 
 Bool ls_glamor_handle_new_screen_pixmap(ScrnInfoPtr pScrn,
                           struct DrmModeBO * const pFrontBO);
+
 #endif

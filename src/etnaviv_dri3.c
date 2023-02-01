@@ -1,8 +1,31 @@
 /*
- * Vivante GPU Acceleration Xorg driver
+ * Copyright (C) 2022 Loongson Corporation
  *
- * Written by Russell King, 2015
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * Xorg 2D driver for the DC & GPU in LS7A1000
+ *
+ * Authors:
+ *    Sui Jingfeng <suijingfeng@loongson.cn>
  */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -16,12 +39,12 @@
 #include <misyncshm.h>
 #include <xf86drm.h>
 #include <etnaviv_drmif.h>
+#include <drm_fourcc.h>
 
 #include "driver.h"
 #include "etnaviv_dri3.h"
 #include "loongson_debug.h"
 #include "loongson_pixmap.h"
-
 
 static Bool etnaviv_dri3_authorise(struct EtnavivRec *pGpu, int fd)
 {
@@ -113,40 +136,8 @@ static int etnaviv_dri3_open(ScreenPtr pScreen, RRProviderPtr provider, int *o)
     return Success;
 }
 
-/*
 static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
-                                             int fd,
-                                             CARD16 width,
-                                             CARD16 height,
-                                             CARD16 stride,
-                                             CARD8 depth,
-                                             CARD8 bpp)
-{
-    struct etnaviv *etnaviv = etnaviv_get_screen_priv(pScreen);
-    struct etnaviv_format fmt;
-    PixmapPtr pixmap;
-
-    if (!etnaviv_format(&fmt, depth, bpp))
-        return NullPixmap;
-
-    pixmap = etnaviv->CreatePixmap(pScreen, 0, 0, depth, 0);
-    if (pixmap == NullPixmap)
-        return pixmap;
-
-    pScreen->ModifyPixmapHeader(pixmap, width, height, 0, 0, stride, NULL);
-
-    if (!etnaviv_pixmap_attach_dmabuf(etnaviv, pixmap, fmt, fd))
-    {
-        etnaviv->DestroyPixmap(pixmap);
-        return NullPixmap;
-    }
-
-    return pixmap;
-}
-*/
-
-static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
-                                             int fd,
+                                             int dmabuf_fd,
                                              CARD16 width,
                                              CARD16 height,
                                              CARD16 stride,
@@ -156,7 +147,7 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct EtnavivRec *gpu = &lsp->etnaviv;
-    struct etna_bo *bo = NULL;
+    struct etna_bo *ebo = NULL;
     struct exa_pixmap_priv *priv = NULL;
     PixmapPtr pPixmap = NULL;
     Bool ret;
@@ -165,7 +156,7 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
 
     /* width and height of 0 means don't allocate any pixmap data */
     pPixmap = pScreen->CreatePixmap(pScreen, 0, 0, depth,
-                                    CREATE_PIXMAP_USAGE_BACKING_PIXMAP);
+                                    CREATE_PIXMAP_USAGE_DRI3);
 
     if (pPixmap == NullPixmap)
     {
@@ -183,55 +174,33 @@ static PixmapPtr etnaviv_dri3_pixmap_from_fd(ScreenPtr pScreen,
         return NullPixmap;
     }
 
-    /* pDrmmode->fd or GPU fd ? */
-
-    bo = etna_bo_from_dmabuf(gpu->dev, fd);
-    // bo = dumb_get_bo_from_fd(pDrmmode->fd, fd, stride, stride * height);
-    if (!bo)
+    ebo = etna_bo_from_dmabuf(gpu->dev, dmabuf_fd);
+    if (!ebo)
     {
         pScreen->DestroyPixmap(pPixmap);
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                    "DRI3: get bo from fd(%d) failed: %dx%d, %d, %d, %d",
-                   fd, width, height, depth, bpp, stride);
+                   dmabuf_fd, width, height, depth, bpp, stride);
 
         return NullPixmap;
     }
 
-    // ret = ls_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
     priv = exaGetPixmapDriverPrivate(pPixmap);
 
-    priv->etna_bo = bo;
-    priv->fd = fd;
+    priv->etna_bo = ebo;
     priv->pitch = stride;
-    priv->owned = TRUE;
+    priv->fd = dmabuf_fd;
+    priv->is_dumb = FALSE;
     priv->width = width;
     priv->height = height;
 
-    pPixmap->devPrivate.ptr = NULL;
-    pPixmap->devKind = stride;
+    /* TODO; get it for the bo */
+    priv->tiling_info = DRM_FORMAT_MOD_VIVANTE_TILED;
+
+    priv->tiling_info = DRM_FORMAT_MOD_VIVANTE_SUPER_TILED;
 
     return pPixmap;
 }
-
-/*
-static int etnaviv_dri3_fd_from_pixmap(ScreenPtr pScreen,
-                                       PixmapPtr pixmap,
-                                       CARD16 *stride,
-                                       CARD32 *size)
-{
-    struct etnaviv *etnaviv = etnaviv_get_screen_priv(pScreen);
-    struct etnaviv_pixmap *vPix = etnaviv_get_pixmap_priv(pixmap);
-
-    // Only support pixmaps backed by an etnadrm bo
-    if (!vPix || !vPix->etna_bo)
-        return BadMatch;
-
-    *stride = pixmap->devKind;
-    *size = etna_bo_size(vPix->etna_bo);
-
-    return etna_bo_to_dmabuf(etnaviv->conn, vPix->etna_bo);
-}
-*/
 
 static struct etna_bo *
 etna_bo_from_pixmap(ScreenPtr pScreen, PixmapPtr pPixmap)

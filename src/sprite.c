@@ -172,8 +172,8 @@ static miPointerSpriteFuncRec loongson_sprite_funcs = {
 Bool loongson_hookup_sprite(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    struct LoongsonRec * const ls = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ls->drmmode;
+    struct LoongsonRec * const lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     miPointerScreenPtr PointPriv = dixLookupPrivate(&pScreen->devPrivates,
                                                     miPointerScreenKey);
@@ -186,7 +186,7 @@ Bool loongson_hookup_sprite(ScreenPtr pScreen)
         return FALSE;
     }
 
-    ls->SpriteFuncs = PointPriv->spriteFuncs;
+    lsp->SpriteFuncs = PointPriv->spriteFuncs;
 
     PointPriv->spriteFuncs = &loongson_sprite_funcs;
 
@@ -200,14 +200,14 @@ Bool loongson_hookup_sprite(ScreenPtr pScreen)
 void loongson_unhookup_sprite(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    struct LoongsonRec * const ls = loongsonPTR(pScrn);
+    struct LoongsonRec * const lsp = loongsonPTR(pScrn);
 
     miPointerScreenPtr PointPriv = dixLookupPrivate(&pScreen->devPrivates,
                                                     miPointerScreenKey);
 
     if (PointPriv->spriteFuncs == &loongson_sprite_funcs)
     {
-            PointPriv->spriteFuncs = ls->SpriteFuncs;
+            PointPriv->spriteFuncs = lsp->SpriteFuncs;
     }
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,

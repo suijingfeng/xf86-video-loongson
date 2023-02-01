@@ -16,6 +16,7 @@
 #include "vblank.h"
 #include "loongson_prime.h"
 #include "loongson_randr.h"
+#include "loongson_pixmap.h"
 #include "drmmode_crtc_config.h"
 
 static Bool drmmode_set_target_scanout_pixmap_gpu(xf86CrtcPtr pCrtc,
@@ -79,6 +80,20 @@ static Bool drmmode_set_target_scanout_pixmap_gpu(xf86CrtcPtr pCrtc,
     return TRUE;
 }
 
+/* OUTPUT SLAVE SUPPORT */
+static void *drmmode_map_slave_bo(drmmode_ptr drmmode, msPixmapPrivPtr ppriv)
+{
+    int ret;
+
+    ret = dumb_bo_map(drmmode->fd, ppriv->backing_bo);
+    if (ret)
+    {
+        return NULL;
+    }
+
+    return dumb_bo_cpu_addr(ppriv->backing_bo);
+}
+
 static Bool drmmode_set_target_scanout_pixmap_cpu(xf86CrtcPtr crtc,
                                                   PixmapPtr ppix,
                                                   PixmapPtr *target)
@@ -88,7 +103,8 @@ static Bool drmmode_set_target_scanout_pixmap_cpu(xf86CrtcPtr crtc,
     msPixmapPrivPtr ppriv;
     void *ptr;
 
-    if (*target) {
+    if (*target)
+    {
         ppriv = msGetPixmapPriv(drmmode, *target);
         drmModeRmFB(drmmode->fd, ppriv->fb_id);
         ppriv->fb_id = 0;
@@ -114,12 +130,16 @@ static Bool drmmode_set_target_scanout_pixmap_cpu(xf86CrtcPtr crtc,
     ppix->devPrivate.ptr = ptr;
     DamageRegister(&ppix->drawable, ppriv->slave_damage);
 
-    if (ppriv->fb_id == 0) {
-        drmModeAddFB(drmmode->fd, ppix->drawable.width,
+    if (ppriv->fb_id == 0)
+    {
+        drmModeAddFB(drmmode->fd,
+                     ppix->drawable.width,
                      ppix->drawable.height,
                      ppix->drawable.depth,
                      ppix->drawable.bitsPerPixel,
-                     ppix->devKind, ppriv->backing_bo->handle, &ppriv->fb_id);
+                     ppix->devKind,
+                     dumb_bo_handle(ppriv->backing_bo),
+                     &ppriv->fb_id);
     }
     *target = ppix;
     return TRUE;
@@ -129,8 +149,8 @@ Bool drmmode_set_target_scanout_pixmap(xf86CrtcPtr crtc,
                                        PixmapPtr ppix,
                                        PixmapPtr *target)
 {
-    drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-    drmmode_ptr drmmode = drmmode_crtc->drmmode;
+    // drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+    // drmmode_ptr drmmode = drmmode_crtc->drmmode;
 
     if ( 0 /* drmmode->reverse_prime_offload_mode */)
         return drmmode_set_target_scanout_pixmap_gpu(crtc, ppix, target);

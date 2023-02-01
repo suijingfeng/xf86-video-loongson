@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -39,10 +39,9 @@ typedef enum {
     OPTION_EXA_TYPE,
     OPTION_PAGEFLIP,
     OPTION_ZAPHOD_HEADS,
-    OPTION_DOUBLE_SHADOW,
     OPTION_ATOMIC,
     OPTION_DEBUG,
-} modesettingOpts;
+} LoongsonOpts;
 
 
 Bool LS_ProcessOptions(ScrnInfoPtr pScrn, OptionInfoPtr * ppOptions);

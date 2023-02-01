@@ -546,8 +546,10 @@ static void ls_pageflip_handler(int fd,
 {
     uint64_t ns;
 
+#if defined(DEBUG_PAGE_FLIP)
     xf86Msg(X_INFO, "%s, fd=%d, frame=%u, sec=%u, usec=%u\n",
                     __func__, fd, frame, sec, usec);
+#endif
 
     ns = ((uint64_t) sec * 1000000 + usec) * 1000;
 

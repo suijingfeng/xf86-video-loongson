@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -33,11 +33,12 @@
 #include <xf86.h>
 #include <exa.h>
 #include <xf86drm.h>
+#include <drm_fourcc.h>
 #include <etnaviv_drmif.h>
-
 #include "driver.h"
 
 #include "etnaviv_exa.h"
+#include "etnaviv_resolve.h"
 #include "loongson_buffer.h"
 #include "loongson_options.h"
 #include "loongson_pixmap.h"
@@ -45,93 +46,23 @@
 
 #include "common.xml.h"
 
-
-#define VIV2D_STREAM_SIZE 1024*32
-
-#define ETNAVIV_3D_WIDTH_ALIGN                16
 #define ETNAVIV_3D_HEIGHT_ALIGN               8
 
-#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
-
-static inline unsigned int etnaviv_pitch(unsigned width, unsigned bpp)
+static unsigned int etnaviv_align_pitch(unsigned width, unsigned bpp)
 {
-	unsigned pitch = bpp != 4 ? width * ((bpp + 7) / 8) : width / 2;
+    unsigned pitch = width * ((bpp + 7) / 8);
 
-	/* GC320 and GC600 needs pitch aligned to 16 */
-	return ALIGN(pitch, 16);
+    /* GC320 and GC600 needs pitch aligned to 16 */
+    /* supertile needs the pitch aligned to 64 pixel(256 bytes) */
+    return LOONGSON_ALIGN(pitch, 256);
 }
 
-static inline unsigned int etnaviv_align_pitch(unsigned width, unsigned bpp)
+static unsigned int etnaviv_align_height(unsigned int height)
 {
-    return etnaviv_pitch(ALIGN(width, ETNAVIV_3D_WIDTH_ALIGN), bpp);
+    return LOONGSON_ALIGN(height, ETNAVIV_3D_HEIGHT_ALIGN);
 }
-
-static inline unsigned int etnaviv_align_height(unsigned int height)
-{
-    return ALIGN(height, ETNAVIV_3D_HEIGHT_ALIGN);
-}
-
-struct ms_exa_prepare_args {
-    struct {
-        int alu;
-        Pixel planemask;
-        Pixel fg;
-    } solid;
-
-    struct {
-        PixmapPtr pSrcPixmap;
-        int alu;
-        Pixel planemask;
-    } copy;
-
-    struct {
-        int op;
-        PicturePtr pSrcPicture;
-        PicturePtr pMaskPicture;
-        PicturePtr pDstPicture;
-        PixmapPtr pSrc;
-        PixmapPtr pMask;
-        PixmapPtr pDst;
-
-        int rotate;
-        Bool reflect_y;
-    } composite;
-};
 
 static struct ms_exa_prepare_args exa_prepare_args = {{0}};
-
-
-static Bool etnaviv_is_etna_bo(int usage_hint)
-{
-    if (usage_hint == CREATE_PIXMAP_USAGE_BACKING_PIXMAP)
-    {
-        return TRUE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_SHARED)
-    {
-        return TRUE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_GLYPH_PICTURE)
-    {
-        // TODO : debug this
-        // suijingfeng: bad looking if using dumb, strange !
-        return FALSE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_SCRATCH)
-    {
-        return FALSE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_SCANOUT)
-    {
-        return FALSE;
-    }
-
-    return FALSE;
-}
 
 /**
  * PrepareAccess() is called before CPU access to an offscreen pixmap.
@@ -177,7 +108,7 @@ static Bool etnaviv_is_etna_bo(int usage_hint)
  * DownloadFromScreen() to migate the pixmap out.
  */
 
-static Bool ls_exa_prepare_access(PixmapPtr pPix, int index)
+static Bool etnaviv_exa_prepare_access(PixmapPtr pPix, int index)
 {
     ScreenPtr pScreen = pPix->drawable.pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
@@ -188,13 +119,18 @@ static Bool ls_exa_prepare_access(PixmapPtr pPix, int index)
 
     if (pPix->devPrivate.ptr)
     {
-        xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-                    "%s: already prepared\n", __func__);
+        DEBUG_MSG("Pixmap %p: already prepared\n", pPix);
 
         return TRUE;
     }
 
-    if (priv->bo != NULL)
+    if (!priv)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "%s: priv is NULL\n", __func__);
+        return FALSE;
+    }
+
+    if (priv->bo)
     {
         int ret = dumb_bo_map(pDrmMode->fd, priv->bo);
         if (ret)
@@ -204,9 +140,15 @@ static Bool ls_exa_prepare_access(PixmapPtr pPix, int index)
                        __func__, strerror(errno), ret);
             return FALSE;
         }
-        pPix->devPrivate.ptr = priv->bo->ptr;
+        if (pDrmMode->shadow_fb)
+            pPix->devPrivate.ptr = pDrmMode->shadow_fb;
+        else
+            pPix->devPrivate.ptr = dumb_bo_cpu_addr(priv->bo);
+        priv->is_mapped = TRUE;
+        return TRUE;
     }
-    else if (priv->etna_bo && etnaviv_is_etna_bo(priv->usage_hint))
+
+    if (priv->etna_bo)
     {
         ptr = etna_bo_map(priv->etna_bo);
         if (!ptr)
@@ -217,14 +159,19 @@ static Bool ls_exa_prepare_access(PixmapPtr pPix, int index)
             return FALSE;
         }
         pPix->devPrivate.ptr = ptr;
+        priv->is_mapped = TRUE;
+        return TRUE;
     }
-    else
+
+    if (priv->pBuf)
     {
         pPix->devPrivate.ptr = priv->pBuf->pDat;
+        priv->is_mapped = TRUE;
+        return TRUE;
     }
 
     /* When !NULL, devPrivate.ptr points to the raw pixel data */
-    return pPix->devPrivate.ptr != NULL;
+    return FALSE;
 }
 
 
@@ -238,28 +185,25 @@ static Bool ls_exa_prepare_access(PixmapPtr pPix, int index)
  * pixmap set up by PrepareAccess().  Note that the FinishAccess() will not be
  * called if PrepareAccess() failed and the pixmap was migrated out.
  */
-static void ls_exa_finish_access(PixmapPtr pPixmap, int index)
+static void etnaviv_exa_finish_access(PixmapPtr pPixmap, int index)
 {
-/*
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
+
+    if (!priv)
+        return;
 
     if (priv && priv->bo)
     {
-        pPixmap->devPrivate.ptr = NULL;
+        // dumb_bo_unmap(priv->bo);
     }
-*/
+
+    pPixmap->devPrivate.ptr = NULL;
 }
 
 /////////////////////////////////////////////////////////////////////////
 
 static Bool PrepareSolidFail(PixmapPtr pPixmap, int alu, Pixel planemask,
         Pixel fill_colour)
-{
-    return FALSE;
-}
-
-static Bool PrepareCopyFail(PixmapPtr pSrc, PixmapPtr pDst, int xdir, int ydir,
-        int alu, Pixel planemask)
 {
     return FALSE;
 }
@@ -306,9 +250,9 @@ static void ms_exa_solid(PixmapPtr pPixmap, int x1, int y1, int x2, int y2)
     ChangeGC(NullClient, gc, GCFunction | GCPlaneMask | GCForeground, val);
     ValidateGC(&pPixmap->drawable, gc);
 
-    ls_exa_prepare_access(pPixmap, 0);
+    etnaviv_exa_prepare_access(pPixmap, 0);
     fbFill(&pPixmap->drawable, gc, x1, y1, x2 - x1, y2 - y1);
-    ls_exa_finish_access(pPixmap, 0);
+    etnaviv_exa_finish_access(pPixmap, 0);
 
     FreeScratchGC(gc);
 }
@@ -323,23 +267,247 @@ static void ms_exa_solid_done(PixmapPtr pPixmap)
 //////////////////////////////////////////////////////////////////////////
 /////////////     copy    ////////////////////////////////////////////////
 
-static Bool ms_exa_prepare_copy(PixmapPtr pSrcPixmap,
-                    PixmapPtr pDstPixmap,
-                    int dx, int dy, int alu, Pixel planemask)
+/*
+ * PrepareCopy() sets up the driver for doing a copy within video memory.
+ *
+ * @param pSrcPixmap source pixmap
+ * @param pDstPixmap destination pixmap
+ * @param dx X copy direction
+ * @param dy Y copy direction
+ * @param alu raster operation
+ * @param planemask write mask for the fill
+ *
+ * This call should set up the driver for doing a series of copies from the
+ * the pSrcPixmap to the pDstPixmap.  The dx flag will be positive if the
+ * hardware should do the copy from the left to the right, and dy will be
+ * positive if the copy should be done from the top to the bottom.  This
+ * is to deal with self-overlapping copies when pSrcPixmap == pDstPixmap.
+ * If your hardware can only support blits that are (left to right, top to
+ * bottom) or (right to left, bottom to top), then you should set
+ * #EXA_TWO_BITBLT_DIRECTIONS, and EXA will break down Copy operations to
+ * ones that meet those requirements.  The alu raster op is one of the GX*
+ * graphics functions listed in X.h, and typically maps to a similar
+ * single-byte "ROP" setting in all hardware.  The planemask controls which
+ * bits of the destination should be affected, and will only represent the
+ * bits up to the depth of pPixmap.
+ *
+ * Note that many drivers will need to store some of the data in the driver
+ * private record, for sending to the hardware with each drawing command.
+ *
+ * The PrepareCopy() call is required of all drivers, but it may fail for any
+ * reason.  Failure results in a fallback to software rendering.
+ */
+static Bool etnaviv_exa_prepare_copy(PixmapPtr pSrcPixmap,
+                                     PixmapPtr pDstPixmap,
+                                     int dx,
+                                     int dy,
+                                     int alu,
+                                     Pixel planemask)
 {
+    struct exa_pixmap_priv *pSrcPriv = exaGetPixmapDriverPrivate(pSrcPixmap);
+
+    if (!pSrcPriv)
+        return FALSE;
+
     exa_prepare_args.copy.pSrcPixmap = pSrcPixmap;
     exa_prepare_args.copy.alu = alu;
     exa_prepare_args.copy.planemask = planemask;
 
-    return TRUE;
+    if (pSrcPriv->tiling_info == DRM_FORMAT_MOD_VIVANTE_TILED)
+        return TRUE;
+
+    if (pSrcPriv->tiling_info == DRM_FORMAT_MOD_VIVANTE_SUPER_TILED)
+        return TRUE;
+
+    return FALSE;
 }
 
 
-static void ms_exa_copy(PixmapPtr pDstPixmap, int srcX, int srcY,
-            int dstX, int dstY, int width, int height)
+static void
+swCopyNtoN(DrawablePtr pSrcDrawable,
+           DrawablePtr pDstDrawable,
+           GCPtr pGC,
+           BoxPtr pbox,
+           int nbox,
+           int dx,
+           int dy,
+           Bool reverse,
+           Bool upsidedown,
+           Pixel bitplane,
+           void *closure)
+{
+    CARD8 alu = pGC ? pGC->alu : GXcopy;
+    FbBits pm = pGC ? fbGetGCPrivate(pGC)->pm : FB_ALLONES;
+    FbBits *src;
+    FbStride srcStride;
+    int srcBpp;
+    int srcXoff, srcYoff;
+    FbBits *dst;
+    FbStride dstStride;
+    int dstBpp;
+    int dstXoff, dstYoff;
+
+    fbGetDrawable(pSrcDrawable, src, srcStride, srcBpp, srcXoff, srcYoff);
+    fbGetDrawable(pDstDrawable, dst, dstStride, dstBpp, dstXoff, dstYoff);
+
+    while (nbox--)
+    {
+        if (pm == FB_ALLONES && alu == GXcopy && !reverse && !upsidedown)
+        {
+            if (!pixman_blt
+                ((uint32_t *) src, (uint32_t *) dst, srcStride, dstStride,
+                 srcBpp, dstBpp, (pbox->x1 + dx + srcXoff),
+                 (pbox->y1 + dy + srcYoff), (pbox->x1 + dstXoff),
+                 (pbox->y1 + dstYoff), (pbox->x2 - pbox->x1),
+                 (pbox->y2 - pbox->y1)))
+                goto fallback;
+            else
+                goto next;
+        }
+ fallback:
+        fbBlt(src + (pbox->y1 + dy + srcYoff) * srcStride,
+              srcStride,
+              (pbox->x1 + dx + srcXoff) * srcBpp,
+              dst + (pbox->y1 + dstYoff) * dstStride,
+              dstStride,
+              (pbox->x1 + dstXoff) * dstBpp,
+              (pbox->x2 - pbox->x1) * dstBpp,
+              (pbox->y2 - pbox->y1),
+              alu, pm, dstBpp, reverse, upsidedown);
+ next:
+        pbox++;
+    }
+
+    fbFinishAccess(pDstDrawable);
+    fbFinishAccess(pSrcDrawable);
+
+}
+
+static void
+etnaviv_blit_tile_n_to_n(DrawablePtr pSrcDrawable,
+                         DrawablePtr pDstDrawable,
+                         GCPtr pGC,
+                         BoxPtr pbox,
+                         int nbox,
+                         int dx,
+                         int dy,
+                         Bool reverse,
+                         Bool upsidedown,
+                         Pixel bitplane,
+                         void *closure)
+{
+    FbBits *pSrc;
+    FbStride srcStride;
+    int srcXoff, srcYoff;
+    FbBits *pDst;
+    FbStride dstStride;
+    int dstXoff, dstYoff;
+    int srcBpp;
+    int dstBpp;
+
+    TRACE_ENTER();
+
+    fbGetDrawable(pSrcDrawable, pSrc, srcStride, srcBpp, srcXoff, srcYoff);
+    fbGetDrawable(pDstDrawable, pDst, dstStride, dstBpp, dstXoff, dstYoff);
+
+    while (nbox--)
+    {
+        lsx_resolve_etnaviv_tile_4x4(pSrc,
+                                     pDst,
+                                     srcStride,
+                                     dstStride,
+                                     (pbox->x1 + dx + srcXoff),
+                                     (pbox->y1 + dy + srcYoff),
+                                     (pbox->x1 + dstXoff),
+                                     (pbox->y1 + dstYoff),
+                                     (pbox->x2 - pbox->x1),
+                                     (pbox->y2 - pbox->y1));
+        pbox++;
+    }
+
+    TRACE_EXIT();
+}
+
+static void
+etnaviv_blit_supertile_n_to_n(DrawablePtr pSrcDrawable,
+                              DrawablePtr pDstDrawable,
+                              GCPtr pGC,
+                              BoxPtr pbox,
+                              int nbox,
+                              int dx,
+                              int dy,
+                              Bool reverse,
+                              Bool upsidedown,
+                              Pixel bitplane,
+                              void *closure)
+{
+    FbBits *pSrc;
+    FbStride srcStride;
+    int srcXoff, srcYoff;
+    FbBits *pDst;
+    FbStride dstStride;
+    int dstXoff, dstYoff;
+    int srcBpp;
+    int dstBpp;
+
+    TRACE_ENTER();
+
+    fbGetDrawable(pSrcDrawable, pSrc, srcStride, srcBpp, srcXoff, srcYoff);
+    fbGetDrawable(pDstDrawable, pDst, dstStride, dstBpp, dstXoff, dstYoff);
+
+    while (nbox--)
+    {
+#if HAVE_LSX
+        etnaviv_supertile_to_linear_lsx(pSrc,
+                                        pDst,
+                                        srcStride,
+                                        dstStride,
+                                        (pbox->x1 + dx + srcXoff),
+                                        (pbox->y1 + dy + srcYoff),
+                                        (pbox->x1 + dstXoff),
+                                        (pbox->y1 + dstYoff),
+                                        (pbox->x2 - pbox->x1),
+                                        (pbox->y2 - pbox->y1));
+#elif HAVE_MSA
+        etnaviv_supertile_to_linear_msa(pSrc,
+                                        pDst,
+                                        srcStride,
+                                        dstStride,
+                                        (pbox->x1 + dx + srcXoff),
+                                        (pbox->y1 + dy + srcYoff),
+                                        (pbox->x1 + dstXoff),
+                                        (pbox->y1 + dstYoff),
+                                        (pbox->x2 - pbox->x1),
+                                        (pbox->y2 - pbox->y1));
+#else
+        etnaviv_supertile_to_linear_generic(pSrc,
+                                            pDst,
+                                            srcStride,
+                                            dstStride,
+                                            (pbox->x1 + dx + srcXoff),
+                                            (pbox->y1 + dy + srcYoff),
+                                            (pbox->x1 + dstXoff),
+                                            (pbox->y1 + dstYoff),
+                                            (pbox->x2 - pbox->x1),
+                                            (pbox->y2 - pbox->y1));
+#endif
+        pbox++;
+    }
+
+    TRACE_EXIT();
+}
+
+static void etnaviv_exa_do_copy(PixmapPtr pDstPixmap,
+                                int srcX,
+                                int srcY,
+                                int dstX,
+                                int dstY,
+                                int width,
+                                int height)
 {
     PixmapPtr pSrcPixmap = exa_prepare_args.copy.pSrcPixmap;
     ScreenPtr screen = pDstPixmap->drawable.pScreen;
+    struct exa_pixmap_priv *src_priv;
     ChangeGCVal val[2];
     GCPtr gc;
 
@@ -350,23 +518,64 @@ static void ms_exa_copy(PixmapPtr pDstPixmap, int srcX, int srcY,
     ChangeGC(NullClient, gc, GCFunction | GCPlaneMask, val);
     ValidateGC(&pDstPixmap->drawable, gc);
 
-    ls_exa_prepare_access(pSrcPixmap, 0);
-    ls_exa_prepare_access(pDstPixmap, 0);
+    etnaviv_exa_prepare_access(pSrcPixmap, 0);
+    etnaviv_exa_prepare_access(pDstPixmap, 0);
 
-    fbCopyArea(&pSrcPixmap->drawable, &pDstPixmap->drawable, gc,
-               srcX, srcY, width, height, dstX, dstY);
+    src_priv = exaGetPixmapDriverPrivate(pSrcPixmap);
 
-    ls_exa_finish_access(pDstPixmap, 0);
-    ls_exa_finish_access(pSrcPixmap, 0);
+    /* TODO: check its format */
+    if (src_priv->tiling_info == DRM_FORMAT_MOD_VIVANTE_TILED)
+    {
+        miDoCopy(&pSrcPixmap->drawable,
+                 &pDstPixmap->drawable,
+                 gc,
+                 srcX, srcY,
+                 width, height,
+                 dstX, dstY,
+                 etnaviv_blit_tile_n_to_n,
+                 0, 0);
+    }
+    else if (src_priv->tiling_info == DRM_FORMAT_MOD_VIVANTE_SUPER_TILED)
+    {
+        struct etna_bo *etna_bo;
+
+        etna_bo = src_priv->etna_bo;
+        etna_bo_cpu_prep(etna_bo, DRM_ETNA_PREP_READ);
+
+        miDoCopy(&pSrcPixmap->drawable,
+                 &pDstPixmap->drawable,
+                 gc,
+                 srcX, srcY,
+                 width, height,
+                 dstX, dstY,
+                 etnaviv_blit_supertile_n_to_n,
+                 0, 0);
+
+        etna_bo_cpu_fini(etna_bo);
+    }
+    else
+    {
+        miDoCopy(&pSrcPixmap->drawable,
+                 &pDstPixmap->drawable,
+                 gc,
+                 srcX, srcY,
+                 width, height,
+                 dstX, dstY,
+                 swCopyNtoN,
+                 0, 0);
+    }
+
+    etnaviv_exa_finish_access(pDstPixmap, 0);
+    etnaviv_exa_finish_access(pSrcPixmap, 0);
 
     FreeScratchGC(gc);
 }
 
-static void ms_exa_copy_done(PixmapPtr pPixmap)
+
+static void etnaviv_exa_copy_done(PixmapPtr pPixmap)
 {
 
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 /////////////     coposite    ////////////////////////////////////////////
@@ -410,21 +619,21 @@ static void ms_exa_composite(PixmapPtr pDst, int srcX, int srcY,
 
     if (pMask)
     {
-        ls_exa_prepare_access(pMask, 0);
+        etnaviv_exa_prepare_access(pMask, 0);
     }
 
-    ls_exa_prepare_access(pSrc, 0);
-    ls_exa_prepare_access(pDst, 0);
+    etnaviv_exa_prepare_access(pSrc, 0);
+    etnaviv_exa_prepare_access(pDst, 0);
 
     fbComposite(op, pSrcPicture, pMaskPicture, pDstPicture,
                 srcX, srcY, maskX, maskY, dstX, dstY, width, height);
 
-    ls_exa_finish_access(pDst, 0);
-    ls_exa_finish_access(pSrc, 0);
+    etnaviv_exa_finish_access(pDst, 0);
+    etnaviv_exa_finish_access(pSrc, 0);
 
     if (pMask)
     {
-        ls_exa_finish_access(pMask, 0);
+        etnaviv_exa_finish_access(pMask, 0);
     }
 }
 
@@ -433,28 +642,170 @@ static void ms_exa_composite_done(PixmapPtr pPixmap)
 
 }
 
+/**
+ * UploadToScreen() loads a rectangle of data from src into pDst.
+ *
+ * @param pDst destination pixmap
+ * @param x destination X coordinate.
+ * @param y destination Y coordinate
+ * @param width width of the rectangle to be copied
+ * @param height height of the rectangle to be copied
+ * @param src pointer to the beginning of the source data
+ * @param src_pitch pitch (in bytes) of the lines of source data.
+ *
+ * UploadToScreen() copies data in system memory beginning at src (with
+ * pitch src_pitch) into the destination pixmap from (x, y) to
+ * (x + width, y + height).  This is typically done with hostdata uploads,
+ * where the CPU sets up a blit command on the hardware with instructions
+ * that the blit data will be fed through some sort of aperture on the card.
+ *
+ * If UploadToScreen() is performed asynchronously, it is up to the driver
+ * to call exaMarkSync().  This is in contrast to most other acceleration
+ * calls in EXA.
+ *
+ * UploadToScreen() can aid in pixmap migration, but is most important for
+ * the performance of exaGlyphs() (antialiased font drawing) by allowing
+ * pipelining of data uploads, avoiding a sync of the card after each glyph.
+ *
+ * @return TRUE if the driver successfully uploaded the data.  FALSE
+ * indicates that EXA should fall back to doing the upload in software.
+ *
+ * UploadToScreen() is not required, but is recommended if Composite
+ * acceleration is supported.
+ */
 
-//////////////////////////////////////////////////////////////////////////
+static Bool
+etnaviv_exa_upload_to_screen(PixmapPtr pPix,
+                             int x, int y, int w, int h,
+                             char *pSrc, int src_pitch)
+{
+    ScreenPtr pScreen = pPix->drawable.pScreen;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
+    char *pDst;
+    unsigned int dst_stride;
+    unsigned int len;
+    int cpp;
+    int i;
+    Bool ret;
 
+    if (!priv)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "%s: priv is NULL\n", __func__);
+        return FALSE;
+    }
+
+    cpp = (pPix->drawable.bitsPerPixel + 7) / 8;
+
+    ret = etnaviv_exa_prepare_access(pPix, 0);
+    if (ret == FALSE)
+        return FALSE;
+
+    pDst = (char *)pPix->devPrivate.ptr;
+
+    dst_stride = exaGetPixmapPitch(pPix);
 
 /*
+    xf86Msg(X_INFO, "%s: (%dx%d) surface at (%d, %d)\n",
+            __func__, w, h, x, y);
 
-static Bool
-ms_exa_upload_to_screen(PixmapPtr pDst, int x, int y, int w, int h,
-                        char *src, int src_pitch)
-{
-    return FALSE;
+    xf86Msg(X_INFO, "%s: stride=%d, src_pitch=%d, mDestAddr is 0x%p\n",
+            __func__, dst_stride, src_pitch, pDst);
+*/
+    pDst += y * dst_stride + x * cpp;
+    len = w * cpp;
+    for (i = 0; i < h; ++i)
+    {
+        memcpy(pDst, pSrc, len);
+        pDst += dst_stride;
+        pSrc += src_pitch;
+    }
+
+    etnaviv_exa_finish_access(pPix, 0);
+
+    return TRUE;
 }
 
-static Bool
-ms_exa_download_from_screen(PixmapPtr pSrc, int x, int y, int w, int h,
-                            char *dst, int dst_pitch)
-{
-    return FALSE;
-}
+/**
+ * DownloadFromScreen() loads a rectangle of data from pSrc into dst
+ *
+ * @param pSrc source pixmap
+ * @param x source X coordinate.
+ * @param y source Y coordinate
+ * @param width width of the rectangle to be copied
+ * @param height height of the rectangle to be copied
+ * @param dst pointer to the beginning of the destination data
+ * @param dst_pitch pitch (in bytes) of the lines of destination data.
+ *
+ * DownloadFromScreen() copies data from offscreen memory in pSrc from
+ * (x, y) to (x + width, y + height), to system memory starting at
+ * dst (with pitch dst_pitch).  This would usually be done
+ * using scatter-gather DMA, supported by a DRM call, or by blitting to AGP
+ * and then synchronously reading from AGP.  Because the implementation
+ * might be synchronous, EXA leaves it up to the driver to call
+ * exaMarkSync() if DownloadFromScreen() was asynchronous.  This is in
+ * contrast to most other acceleration calls in EXA.
+ *
+ * DownloadFromScreen() can aid in the largest bottleneck in pixmap
+ * migration, which is the read from framebuffer when evicting pixmaps from
+ * framebuffer memory.  Thus, it is highly recommended, even though
+ * implementations are typically complicated.
+ *
+ * @return TRUE if the driver successfully downloaded the data.  FALSE
+ * indicates that EXA should fall back to doing the download in software.
+ *
+ * DownloadFromScreen() is not required, but is highly recommended.
+ */
 
+/**
+ * Does fake acceleration of DownloadFromScren using memcpy.
+ */
+static Bool
+etnaviv_exa_download_from_screen(PixmapPtr pPix,
+                                 int x, int y, int w, int h,
+                                 char *pDst, int dst_stride)
+{
+    ScreenPtr pScreen = pPix->drawable.pScreen;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
+    char *pSrc;
+    unsigned int src_stride;
+    unsigned int len;
+    int cpp;
+    int i;
+
+    if (!priv)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "%s: priv is NULL\n", __func__);
+        return FALSE;
+    }
+
+    cpp = (pPix->drawable.bitsPerPixel + 7) / 8;
+
+    etnaviv_exa_prepare_access(pPix, 0);
+
+    pSrc = (char *)pPix->devPrivate.ptr;
+
+    src_stride = exaGetPixmapPitch(pPix);
+
+/*
+    xf86Msg(X_INFO, "%s: (%dx%d) surface at (%d, %d)\n",
+            __func__, w, h, x, y);
 */
 
+    pSrc += y * src_stride + x * cpp;
+    len = w * cpp;
+    for (i = 0; i < h; ++i)
+    {
+        memcpy(pDst, pSrc, len);
+        pDst += dst_stride;
+        pSrc += src_stride;
+    }
+
+    etnaviv_exa_finish_access(pPix, 0);
+
+    return TRUE;
+}
 
 static void etnaviv_exa_wait_marker(ScreenPtr pScreen, int marker)
 {
@@ -467,16 +818,13 @@ static int etnaviv_exa_mark_sync(ScreenPtr pScreen)
     return 0;
 }
 
-
-//////////////////////////////////////////////////////////////////////////////
-
 static void *etnaviv_create_pixmap(ScreenPtr pScreen,
-                            int width,
-                            int height,
-                            int depth,
-                            int usage_hint,
-                            int bitsPerPixel,
-                            int *new_fb_pitch)
+                                   int width,
+                                   int height,
+                                   int depth,
+                                   int usage_hint,
+                                   int bitsPerPixel,
+                                   int *new_fb_pitch)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
@@ -500,7 +848,7 @@ static void *etnaviv_create_pixmap(ScreenPtr pScreen,
         return priv;
     }
 
-    pitch = etnaviv_pitch(width, bitsPerPixel);
+    pitch = etnaviv_align_pitch(width, bitsPerPixel);
     size = pitch * etnaviv_align_height(height);
 
     etna_bo = etna_bo_new(etnaviv->dev, size, DRM_ETNA_GEM_CACHE_CACHED);
@@ -515,22 +863,23 @@ static void *etnaviv_create_pixmap(ScreenPtr pScreen,
     }
 
     priv->etna_bo = etna_bo;
+    priv->pitch = pitch;
+    priv->is_mapped = FALSE;
+    priv->is_dumb = FALSE;
 
     if (new_fb_pitch)
     {
         *new_fb_pitch = pitch;
     }
 
-    priv->pitch = pitch;
-
     return priv;
 }
 
 
-static void etnaviv_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
+static void etnaviv_exa_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    struct exa_pixmap_priv *priv = (struct exa_pixmap_priv *)driverPriv;
+    struct exa_pixmap_priv *priv = (struct exa_pixmap_priv *) driverPriv;
 
     if (!priv)
     {
@@ -541,55 +890,50 @@ static void etnaviv_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
     if (priv->fd > 0)
     {
         drmClose(priv->fd);
+        priv->fd = -1;
     }
 
     if (priv->etna_bo)
     {
         etna_bo_del(priv->etna_bo);
+        priv->etna_bo = NULL;
     }
-    else
+
+    if (priv->pBuf)
     {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "etnaviv: isn't a etna_bo\n");
+        LS_DestroyExaPixmap(pScreen, driverPriv);
+        priv->pBuf = NULL;
     }
 
     free(priv);
 }
 
-
-static void ls_exa_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
-{
-    struct exa_pixmap_priv *pPriv = (struct exa_pixmap_priv *) driverPriv;
-
-    if (etnaviv_is_etna_bo(pPriv->usage_hint))
-    {
-        etnaviv_destroy_pixmap(pScreen, driverPriv);
-    }
-    else
-    {
-        LS_DestroyExaPixmap(pScreen, driverPriv);
-    }
-}
-
 /* Hooks to allow driver to its own pixmap memory management */
 
-static void *ls_exa_create_pixmap2(ScreenPtr pScreen,
-                                   int width,
-                                   int height,
-                                   int depth,
-                                   int usage_hint,
-                                   int bitsPerPixel,
-                                   int *new_fb_pitch)
+static void *etnaviv_exa_create_pixmap(ScreenPtr pScreen,
+                                       int width,
+                                       int height,
+                                       int depth,
+                                       int usage_hint,
+                                       int bitsPerPixel,
+                                       int *new_fb_pitch)
 {
-    if (etnaviv_is_etna_bo(usage_hint))
+    if (usage_hint == CREATE_PIXMAP_USAGE_SCANOUT)
+    {
+        xf86Msg(X_INFO, "etnaviv: allocate %dx%d dumb bo\n", width, height);
+
+        return LS_CreateDumbPixmap(pScreen, width, height, depth,
+                                   usage_hint, bitsPerPixel, new_fb_pitch);
+    }
+
+    if (1)
     {
         return etnaviv_create_pixmap(pScreen, width, height, depth,
                                      usage_hint, bitsPerPixel, new_fb_pitch);
     }
-    else
-    {
-        return LS_CreateExaPixmap(pScreen, width, height, depth,
-                                  usage_hint, bitsPerPixel, new_fb_pitch);
-    }
+
+    return LS_CreateExaPixmap(pScreen, width, height, depth,
+                              usage_hint, bitsPerPixel, new_fb_pitch);
 }
 
 
@@ -615,238 +959,50 @@ static Bool etnaviv_is_offscreen_pixmap(PixmapPtr pPixmap)
     //
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
 
-    if (priv == NULL)
+    if (!priv)
     {
+        xf86Msg(X_INFO, "%s:%d\n", __func__, __LINE__);
         return FALSE;
     }
 
-    if (etnaviv_is_etna_bo(priv->usage_hint))
+    if (priv->bo)
     {
-        return (priv->etna_bo != NULL);
+        return TRUE;
     }
-    else
+
+    if (priv->etna_bo)
     {
-        return (priv->pBuf->pDat != NULL);
+        return TRUE;
     }
-}
 
-
-static int etnaviv_report_features(ScrnInfoPtr pScrn,
-                                   struct etna_gpu *gpu,
-                                   struct EtnavivRec *pEnt)
-{
-    uint64_t val;
-    /* HALTI (gross architecture) level. -1 for pre-HALTI. */
-    int halti;
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_MODEL, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_MODEL");
-       goto fail;
-    }
-    pEnt->model = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Vivante GC%x\n", (uint32_t)val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_REVISION, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_REVISION");
-       goto fail;
-    }
-    pEnt->revision = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "revision %x\n", (uint32_t)val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_0, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_FEATURES_0");
-       goto fail;
-    }
-    pEnt->features[0] = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "features[0]: %lx\n", val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_1, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_FEATURES_1");
-       goto fail;
-    }
-    pEnt->features[1] = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "features[1]: %lx\n", val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_2, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_FEATURES_2");
-       goto fail;
-    }
-    pEnt->features[2] = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "features[2]: %lx\n", val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_3, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_FEATURES_3");
-       goto fail;
-    }
-    pEnt->features[3] = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "features[3]: %lx\n", val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_4, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_FEATURES_4");
-       goto fail;
-    }
-    pEnt->features[4] = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "features[4]: %lx\n", val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_5, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_FEATURES_5");
-       goto fail;
-    }
-    pEnt->features[5] = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "features[5]: %lx\n", val);
-
-    if (etna_gpu_get_param(gpu, ETNA_GPU_FEATURES_6, &val)) {
-       DEBUG_MSG("could not get ETNA_GPU_FEATURES_6");
-       goto fail;
-    }
-    pEnt->features[6] = val;
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "features[6]: %lx\n", val);
-
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_INSTRUCTION_COUNT, &val)) {
-      DEBUG_MSG("could not get ETNA_GPU_INSTRUCTION_COUNT");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "ETNA_GPU_INSTRUCTION_COUNT: %lx\n", val);
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_VERTEX_OUTPUT_BUFFER_SIZE, &val)) {
-      DEBUG_MSG("could not get ETNA_GPU_VERTEX_OUTPUT_BUFFER_SIZE");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "vertex_output_buffer_size: %lx\n", val);
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_VERTEX_CACHE_SIZE, &val)) {
-      DEBUG_MSG("could not get ETNA_GPU_VERTEX_CACHE_SIZE");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "vertex_cache_size: %lx\n", val);
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_SHADER_CORE_COUNT, &val)) {
-      DEBUG_MSG("could not get ETNA_GPU_SHADER_CORE_COUNT");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "shader_core_count: %lx\n", val);
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_STREAM_COUNT, &val)) {
-      DEBUG_MSG("could not get ETNA_GPU_STREAM_COUNT");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "gpu stream count: %lx\n", val);
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_REGISTER_MAX, &val)) {
-      DEBUG_MSG("could not get ETNA_GPU_REGISTER_MAX");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "max_registers: %lx\n", val);
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_PIXEL_PIPES, &val)) {
-      DEBUG_MSG("could not get ETNA_GPU_PIXEL_PIPES");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "pixel pipes: %lx\n", val);
-
-   if (etna_gpu_get_param(gpu, ETNA_GPU_NUM_CONSTANTS, &val)) {
-      DEBUG_MSG("could not get %s", "ETNA_GPU_NUM_CONSTANTS");
-      goto fail;
-   }
-   xf86DrvMsg(pScrn->scrnIndex, X_INFO, "num of constants: %lx\n", val);
-
-   #define VIV_FEATURE(screen, word, feature) \
-        ((screen->features[viv_ ## word] & (word ## _ ## feature)) != 0)
-
-   /* Figure out gross GPU architecture. See rnndb/common.xml for a specific
-    * description of the differences. */
-   if (VIV_FEATURE(pEnt, chipMinorFeatures5, HALTI5))
-      halti = 5; /* New GC7000/GC8x00  */
-   else if (VIV_FEATURE(pEnt, chipMinorFeatures5, HALTI4))
-      halti = 4; /* Old GC7000/GC7400 */
-   else if (VIV_FEATURE(pEnt, chipMinorFeatures5, HALTI3))
-      halti = 3; /* None? */
-   else if (VIV_FEATURE(pEnt, chipMinorFeatures4, HALTI2))
-      halti = 2; /* GC2500/GC3000/GC5000/GC6400 */
-   else if (VIV_FEATURE(pEnt, chipMinorFeatures2, HALTI1))
-      halti = 1; /* GC900/GC4000/GC7000UL */
-   else if (VIV_FEATURE(pEnt, chipMinorFeatures1, HALTI0))
-      halti = 0; /* GC880/GC2000/GC7000TM */
-   else
-      halti = -1; /* GC7000nanolite / pre-GC2000 except GC880 */
-
-   if (halti >= 0)
-      xf86DrvMsg(pScrn->scrnIndex, X_INFO, "etnaviv: GPU arch: HALTI%d", halti);
-   else
-      xf86DrvMsg(pScrn->scrnIndex, X_INFO, "etnaviv: GPU arch: pre-HALTI");
-
-
- fail:
-    return -1;
+    return TRUE;
 }
 
 Bool etnaviv_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
 {
-    loongsonPtr lsp = loongsonPTR(pScrn);
-
-    {
-        struct EtnavivRec *pGpu = &lsp->etnaviv;
-        struct etna_device *dev;
-        struct etna_gpu *gpu;
-        struct etna_pipe *pipe;
-        struct etna_cmd_stream *stream;
-        uint64_t model, revision;
-        int fd;
-
-        fd = drmOpenWithType("etnaviv", NULL, DRM_NODE_PRIMARY);
-        if (fd != -1)
-        {
-            drmVersionPtr version = drmGetVersion(fd);
-            if (version)
-            {
-                xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Version: %d.%d.%d\n",
-                           version->version_major, version->version_minor,
-                           version->version_patchlevel);
-                xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Name: %s\n", version->name);
-                xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Date: %s\n", version->date);
-                xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Description: %s\n", version->desc);
-                drmFreeVersion(version);
-            }
-        }
-
-        dev = etna_device_new(fd);
-
-        /* we assume that core 0 is a 2D capable one */
-        gpu = etna_gpu_new(dev, 0);
-        pipe = etna_pipe_new(gpu, ETNA_PIPE_2D);
-
-        stream = etna_cmd_stream_new(pipe, VIV2D_STREAM_SIZE, NULL, NULL);
-
-        pGpu->fd = fd;
-        pGpu->dev = dev;
-        pGpu->gpu = gpu;
-        pGpu->pipe = pipe;
-        pGpu->stream = stream;
-
-        etna_gpu_get_param(gpu, ETNA_GPU_MODEL, &model);
-        etna_gpu_get_param(gpu, ETNA_GPU_REVISION, &revision);
-
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "EXA: Vivante GC%x GPU revision %x found!\n",
-                   (uint32_t)model, (uint32_t)revision);
-
-        etnaviv_report_features(pScrn, gpu, pGpu);
-
-    }
-
     TRACE_ENTER();
 
     pExaDrv->exa_major = EXA_VERSION_MAJOR;
     pExaDrv->exa_minor = EXA_VERSION_MINOR;
 
     pExaDrv->pixmapOffsetAlign = 16;
-    pExaDrv->pixmapPitchAlign = 256;
+    pExaDrv->pixmapPitchAlign = LOONGSON_DUMB_BO_ALIGN;
 
     pExaDrv->maxX = 8192;
     pExaDrv->maxY = 8192;
 
     // bo based pixmap ops
+    //
+    // EXA_HANDLES_PIXMAPS indicates to EXA that the driver can handle
+    // all pixmap addressing and migration.
+    //
+    // EXA_SUPPORTS_PREPARE_AUX indicates to EXA that the driver can
+    // handle the EXA_PREPARE_AUX* indices in the Prepare/FinishAccess hooks.
+    // If there are no such hooks, this flag has no effect.
+    //
+    // EXA_OFFSCREEN_PIXMAPS indicates to EXA that the driver can support
+    // offscreen pixmaps.
+    //
     pExaDrv->flags = EXA_HANDLES_PIXMAPS |
                      EXA_SUPPORTS_PREPARE_AUX |
                      EXA_OFFSCREEN_PIXMAPS;
@@ -857,9 +1013,9 @@ Bool etnaviv_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->DoneSolid = ms_exa_solid_done;
 
     //// copy
-    pExaDrv->PrepareCopy = ms_exa_prepare_copy;
-    pExaDrv->Copy = ms_exa_copy;
-    pExaDrv->DoneCopy = ms_exa_copy_done;
+    pExaDrv->PrepareCopy = etnaviv_exa_prepare_copy;
+    pExaDrv->Copy = etnaviv_exa_do_copy;
+    pExaDrv->DoneCopy = etnaviv_exa_copy_done;
 
     //// composite
     pExaDrv->CheckComposite = ms_exa_check_composite;
@@ -867,22 +1023,26 @@ Bool etnaviv_setup_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->Composite = ms_exa_composite;
     pExaDrv->DoneComposite = ms_exa_composite_done;
 
-    /* TODO: Impl upload/download */
-    // pExaDrv->UploadToScreen = ms_exa_upload_to_screen;
-    // pExaDrv->DownloadFromScreen = ms_exa_download_from_screen;
+    pExaDrv->UploadToScreen = etnaviv_exa_upload_to_screen;
+    pExaDrv->DownloadFromScreen = etnaviv_exa_download_from_screen;
 
     pExaDrv->WaitMarker = etnaviv_exa_wait_marker;
     pExaDrv->MarkSync = etnaviv_exa_mark_sync;
-    pExaDrv->DestroyPixmap = ls_exa_destroy_pixmap;
-    pExaDrv->CreatePixmap2 = ls_exa_create_pixmap2;
-    pExaDrv->PrepareAccess = ls_exa_prepare_access;
-    pExaDrv->FinishAccess = ls_exa_finish_access;
+
+    /* Hooks to allow driver to its own pixmap memory management
+     * and for drivers with tiling support. Driver MUST fill out
+     * new_fb_pitch with valid pitch of pixmap
+     */
+    pExaDrv->CreatePixmap2 = etnaviv_exa_create_pixmap;
+    pExaDrv->DestroyPixmap = etnaviv_exa_destroy_pixmap;
+
+    pExaDrv->PrepareAccess = etnaviv_exa_prepare_access;
+    pExaDrv->FinishAccess = etnaviv_exa_finish_access;
     pExaDrv->PixmapIsOffscreen = etnaviv_is_offscreen_pixmap;
 
     if (1)
     {
-        /* Always fallback for software operations */
-        pExaDrv->PrepareCopy = PrepareCopyFail;
+        /* fallbacks for software operations */
         pExaDrv->PrepareSolid = PrepareSolidFail;
         pExaDrv->CheckComposite = CheckCompositeFail;
         pExaDrv->PrepareComposite = PrepareCompositeFail;

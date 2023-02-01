@@ -31,16 +31,25 @@
 #include "loongson_buffer.h"
 
 
-void LS_AllocBuf(int width, int height,
-        int depth, int bpp, int usage_hint, struct LoongsonBuf *pBuf)
+void LS_AllocBuf(int width, int height, int bpp, struct LoongsonBuf *pBuf)
 {
-    //
-    // depth and bpp is useless
-    //
-    unsigned int pitch = ((width * bpp + FB_MASK) >> FB_SHIFT) * sizeof(FbBits);
+    unsigned int pitch;
     unsigned int size;
-    // suijingfeng: make sure this align value reasonable
-    pitch = (pitch + 15) & ~(15);
+
+    if (bpp == 32)
+        pitch = width * 4;
+    else if (bpp == 16)
+        pitch = width * 2;
+    else if (bpp == 8)
+        pitch = width;
+    else
+    {
+        pitch = ((width * bpp + FB_MASK) >> FB_SHIFT) * sizeof(FbBits);
+        xf86Msg(X_WARNING, "create %d bit pixmap\n", bpp);
+    }
+
+    // TODO: make sure this align value reasonable
+    pitch = (pitch + 15) & ~15;
     size = pitch * height;
 
     pBuf->pDat = malloc(size);
@@ -53,8 +62,7 @@ void LS_AllocBuf(int width, int height,
 
 void LS_FreeBuf(struct LoongsonBuf *pBuf)
 {
-    //	NULL_DBG_MSG("FreeBuf pDat:%p", pBuf->pDat);
-    if (pBuf->pDat != NULL)
+    if (pBuf && pBuf->pDat)
     {
         free(pBuf->pDat);
 

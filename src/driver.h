@@ -1,5 +1,6 @@
 /*
  * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright (C) 2022 Loongson Corporation
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -38,6 +39,9 @@
 #include <damage.h>
 #include <shadow.h>
 
+#if HAVE_LIBDRM_ETNAVIV
+#include "etnaviv_device.h"
+#endif
 
 #ifdef GLAMOR_HAS_GBM
 #define GLAMOR_FOR_XORG 1
@@ -46,41 +50,31 @@
 #endif
 
 #include "drmmode_display.h"
-#include "etnaviv_drmif.h"
-
-/* Enum with indices for each of the feature words */
-enum viv_features_word {
-   viv_chipFeatures = 0,
-   viv_chipMinorFeatures0 = 1,
-   viv_chipMinorFeatures1 = 2,
-   viv_chipMinorFeatures2 = 3,
-   viv_chipMinorFeatures3 = 4,
-   viv_chipMinorFeatures4 = 5,
-   viv_chipMinorFeatures5 = 6,
-   VIV_FEATURES_WORD_COUNT /* Must be last */
-};
-
-struct EtnavivRec {
-    int fd;
-    char *render_node;
-    struct etna_device *dev;
-    struct etna_gpu *gpu;
-    struct etna_pipe *pipe;
-    struct etna_cmd_stream *stream;
-    struct etna_bo *bo;
-
-    uint32_t model;
-    uint32_t revision;
-    uint32_t features[VIV_FEATURES_WORD_COUNT];
-};
 
 struct LoongsonRec {
     int fd;
 
-    int Chipset;
-    EntityInfoPtr pEnt;
+    unsigned int vendor_id;
+    unsigned int device_id;
+    unsigned int revision;
 
-    Bool noAccel;
+    EntityInfoPtr pEnt;
+    struct pci_device *PciInfo;
+
+#if HAVE_LIBDRM_ETNAVIV
+    struct EtnavivRec etnaviv;
+#endif
+
+#if HAVE_LIBDRM_GSGPU
+    struct gsgpu_device *gsgpu;
+#endif
+
+    Bool is_gsgpu;
+    Bool is_lsdc;
+    Bool is_loongson_drm;
+    Bool is_prime_supported;
+    Bool has_etnaviv;
+
     CloseScreenProcPtr CloseScreen;
     CreateWindowProcPtr CreateWindow;
 
@@ -88,7 +82,7 @@ struct LoongsonRec {
     ScreenBlockHandlerProcPtr BlockHandler;
     miPointerSpriteFuncPtr SpriteFuncs;
     void *driver;
-
+    char *render_node;
     struct drmmode_rec drmmode;
 
     drmEventContext event_context;
@@ -103,6 +97,7 @@ struct LoongsonRec {
 
     DamagePtr damage;
     Bool dirty_enabled;
+    Bool shadow_present;
 
     uint32_t cursor_width, cursor_height;
 
@@ -114,7 +109,6 @@ struct LoongsonRec {
 
     /* EXA API */
     ExaDriverPtr exaDrvPtr;
-    struct EtnavivRec etnaviv;
 
     /* shadow API */
     struct ShadowAPI {
@@ -123,7 +117,7 @@ struct LoongsonRec {
         void (*Remove)(ScreenPtr, PixmapPtr);
         void (*Update32to24)(ScreenPtr, shadowBufPtr);
         void (*UpdatePacked)(ScreenPtr, shadowBufPtr);
-        void (*Update32)(ScreenPtr, shadowBufPtr);
+        void (*Update32)(ScreenPtr, PixmapPtr pShadow, RegionPtr pDamage);
     } shadow;
 
 #ifdef GLAMOR_HAS_GBM
@@ -167,15 +161,10 @@ int ms_get_crtc_ust_msc(xf86CrtcPtr crtc, CARD64 *ust, CARD64 *msc);
 
 uint64_t ms_kernel_msc_to_crtc_msc(xf86CrtcPtr crtc, uint64_t sequence, Bool is64bit);
 
-
-Bool ms_dri2_screen_init(ScreenPtr screen);
-void ms_dri2_close_screen(ScreenPtr screen);
-
 Bool ms_vblank_screen_init(ScreenPtr screen);
 void ms_vblank_close_screen(ScreenPtr screen);
 
 Bool ms_present_screen_init(ScreenPtr screen);
-
 
 int ms_flush_drm_events(ScreenPtr screen);
 

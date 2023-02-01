@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -30,7 +30,6 @@
 
 #include <unistd.h>
 #include <fcntl.h>
-#include <drm_fourcc.h>
 #include <sys/stat.h>
 
 #include <xf86.h>
@@ -39,7 +38,9 @@
 
 #include "driver.h"
 #include "gsgpu_dri3.h"
+#include "gsgpu_bo_helper.h"
 #include "loongson_debug.h"
+#include "loongson_pixmap.h"
 
 static int LS_IsRenderNode(int fd, struct stat *st)
 {
@@ -53,7 +54,7 @@ static int LS_IsRenderNode(int fd, struct stat *st)
 }
 
 
-static int ms_exa_dri3_open_client(ClientPtr client,
+static int gsgpu_dri3_open_client(ClientPtr client,
                                    ScreenPtr pScreen,
                                    RRProviderPtr provider,
                                    int *fdp)
@@ -71,18 +72,18 @@ static int ms_exa_dri3_open_client(ClientPtr client,
         return TRUE;
     }
 
-    fd = open(pDrmode->dri3_device_name, O_RDWR | O_CLOEXEC, 0);
+    fd = open(lsp->render_node, O_RDWR | O_CLOEXEC, 0);
     if (fd < 0)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                       "DRI3Open: cannot open %s.\n",
-                       pDrmode->dri3_device_name);
+                   "DRI3Open: cannot open %s.\n",
+                   lsp->render_node);
         return BadAlloc;
     }
     else
     {
         DEBUG_MSG("%s: %s opened in %d.",
-                  __func__, pDrmode->dri3_device_name, fd);
+                  __func__, lsp->render_node, fd);
     }
 
     /*
@@ -131,200 +132,136 @@ static int ms_exa_dri3_open_client(ClientPtr client,
     return Success;
 }
 
+static struct gsgpu_bo *
+gsgpu_bo_from_dma_buf_fd(struct gsgpu_device *pDev, int dmabuf_fd)
+{
+    struct gsgpu_bo_import_result result = {0};
+    int ret;
 
-static PixmapPtr ms_exa_pixmap_from_fds(ScreenPtr pScreen,
-                                        CARD8 num_fds,
-                                        const int *fds,
-                                        CARD16 width,
-                                        CARD16 height,
-                                        const CARD32 *strides,
-                                        const CARD32 *offsets,
-                                        CARD8 depth,
-                                        CARD8 bpp,
-                                        uint64_t modifier)
+    ret = gsgpu_bo_import(pDev,
+                          gsgpu_bo_handle_type_dma_buf_fd,
+                          (uint32_t)dmabuf_fd,
+                          &result);
+
+    if (ret)
+    {
+        xf86Msg(X_ERROR, "GSGPU: DRI3: import bo failed.\n");
+        return NULL;
+    }
+
+    return result.buf_handle;
+}
+
+static PixmapPtr gsgpu_dri3_pixmap_from_fd(ScreenPtr pScreen,
+                                           int fd,
+                                           CARD16 width,
+                                           CARD16 height,
+                                           CARD16 stride,
+                                           CARD8 depth,
+                                           CARD8 bpp)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmode = &lsp->drmmode;
-
+    struct gsgpu_bo *gbo = NULL;
     PixmapPtr pPixmap;
-    struct dumb_bo *bo = NULL;
     Bool ret;
 
     TRACE_ENTER();
 
-    /* modifier != DRM_FORMAT_MOD_INVALID */
-    if ((num_fds != 1) || offsets[0])
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-        "DRI3: num_fds=%d, offsets[0]=%d, modifier=%ld, %lld\n",
-        num_fds, offsets[0], modifier, DRM_FORMAT_MOD_INVALID);
-
-        TRACE_EXIT();
-        return NULL;
-    }
-
     /* width and height of 0 means don't allocate any pixmap data */
     pPixmap = pScreen->CreatePixmap(pScreen, 0, 0, depth,
-                                    CREATE_PIXMAP_USAGE_SHARED);
+                                    CREATE_PIXMAP_USAGE_DRI3);
 
-    if (pPixmap == NullPixmap)
+    if (!pPixmap)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "DRI3: cannot create pixmap.\n");
-        TRACE_EXIT();
+                   "GSGPU: DRI3: cannot create pixmap.\n");
         return NullPixmap;
     }
 
-
-    ret = pScreen->ModifyPixmapHeader(pPixmap,
-                             width, height, depth, bpp, strides[0], NULL);
+    ret = pScreen->ModifyPixmapHeader(pPixmap, width, height, depth, bpp,
+                                      stride, NULL);
     if (ret == FALSE)
     {
         pScreen->DestroyPixmap(pPixmap);
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "DRI3: ModifyPixmapHeader failed.\n");
-        TRACE_EXIT();
+                   "GSGPU: DRI3: ModifyPixmapHeader failed.\n");
         return NullPixmap;
     }
 
-    bo = dumb_get_bo_from_fd(pDrmode->fd, fds[0],
-                             strides[0], strides[0] * height);
+    gbo = gsgpu_bo_from_dma_buf_fd(lsp->gsgpu, fd);
 
-    DEBUG_MSG("DRI3: PixmapFromFD: pixmap:%p %dx%d %d/%d %d->%d",
-        pPixmap, width, height, depth, bpp, strides[0], pPixmap->devKind);
-
-    if (NULL == bo)
+    if (NULL == gbo)
     {
         pScreen->DestroyPixmap(pPixmap);
 
-        TRACE_EXIT();
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "GSGPU: DRI3: bo from dma buf failed: %dx%d %d/%d %d->%d",
+                   width, height, depth, bpp, stride, pPixmap->devKind);
         return NULL;
     }
 
-    ret = ls_exa_set_pixmap_bo(pScrn, pPixmap, bo, TRUE);
+    ret = gsgpu_set_pixmap_bo(pScrn, pPixmap, gbo, fd);
     if (ret == FALSE)
     {
         pScreen->DestroyPixmap(pPixmap);
-        dumb_bo_destroy(pDrmode->fd, bo);
+        gsgpu_bo_free(gbo);
 
-        TRACE_EXIT();
-        return NULL;;
+        return NULL;
     }
 
     TRACE_EXIT();
     return pPixmap;
 }
 
-
-static int ms_exa_egl_fd_from_pixmap(ScreenPtr pScreen,
-        PixmapPtr pixmap, CARD16 *stride, CARD32 *size)
+static int gsgpu_dri3_fd_from_pixmap(ScreenPtr pScreen,
+                                     PixmapPtr pixmap,
+                                     CARD16 *stride,
+                                     CARD32 *size)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    struct dumb_bo *bo;
-    int prime_fd;
+    struct gsgpu_bo *gbo;
+    struct gsgpu_bo_info bo_info;
+    uint32_t prime_fd;
     int ret;
 
     TRACE_ENTER();
 
-    bo = dumb_bo_from_pixmap(pScreen, pixmap);
-    if (bo == NULL)
+    gbo = gsgpu_get_pixmap_bo(pixmap);
+    if (gbo == NULL)
     {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                   "failed to get bo from pixmap\n");
         return -1;
     }
 
-    ret = drmPrimeHandleToFD(pDrmMode->fd, bo->handle, DRM_CLOEXEC, &prime_fd);
-    if (ret)
+    if (gsgpu_bo_query_info(gbo, &bo_info) != 0)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                   "failed to get dmabuf fd: %d\n", ret);
+                   "Failed to get bo info\n");
+
+        return -1;
+    }
+
+    ret = gsgpu_bo_export(gbo, gsgpu_bo_handle_type_dma_buf_fd, &prime_fd);
+    if (ret != 0)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                   "Failed to get dmabuf fd from gsgpu bo: %d\n", ret);
         return ret;
     }
 
-    *stride = bo->pitch;
-    *size = bo->size;
+    *stride = pixmap->devKind;
+    *size = bo_info.alloc_size;
 
     TRACE_EXIT();
 
     return prime_fd;
 }
 
-
-static int ms_exa_egl_fds_from_pixmap(ScreenPtr pScreen,
-                                      PixmapPtr pixmap,
-                                      int *fds,
-                                      uint32_t *strides,
-                                      uint32_t *offsets,
-                                      uint64_t *modifier)
-{
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    struct dumb_bo *bo = dumb_bo_from_pixmap(pScreen, pixmap);
-    int prime_fd;
-    int ret;
-
-    if (bo == NULL)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                   "%s: failed to get bo from pixmap\n", __func__);
-        return 0;
-    }
-
-    ret = drmPrimeHandleToFD(pDrmMode->fd, bo->handle, DRM_CLOEXEC, &prime_fd);
-    if (ret)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: failed to get dmabuf fd: %d\n", __func__, ret);
-        return ret;
-    }
-
-    fds[0] = prime_fd;
-    strides[0] = bo->pitch;
-    offsets[0] = 0;
-    *modifier = DRM_FORMAT_MOD_LINEAR;
-
-    return 1;
-}
-
-static Bool ms_exa_get_formats(ScreenPtr screen,
-        CARD32 *num_formats, CARD32 **formats)
-{
-    /* TODO: Return formats */
-    *num_formats = 0;
-    return TRUE;
-}
-
-
-static Bool ms_exa_get_modifiers(ScreenPtr screen,
-        uint32_t format, uint32_t *num_modifiers, uint64_t **modifiers)
-{
-    *num_modifiers = 0;
-    return TRUE;
-}
-
-
-static Bool ms_exa_get_drawable_modifiers(DrawablePtr draw,
-        uint32_t format, uint32_t *num_modifiers, uint64_t **modifiers)
-{
-    *num_modifiers = 0;
-    return TRUE;
-}
-
-
 static const dri3_screen_info_rec gsgpu_dri3_info = {
-    .version = 2,
-    .open_client = ms_exa_dri3_open_client,
-    .pixmap_from_fds = ms_exa_pixmap_from_fds,
-    .fd_from_pixmap = ms_exa_egl_fd_from_pixmap,
-    .fds_from_pixmap = ms_exa_egl_fds_from_pixmap,
-    .get_formats = ms_exa_get_formats,
-    .get_modifiers = ms_exa_get_modifiers,
-    .get_drawable_modifiers = ms_exa_get_drawable_modifiers,
+    .version = 1,
+    .open_client = gsgpu_dri3_open_client,
+    .pixmap_from_fd = gsgpu_dri3_pixmap_from_fd,
+    .fd_from_pixmap = gsgpu_dri3_fd_from_pixmap,
 };
 
 
@@ -332,7 +269,6 @@ Bool gsgpu_dri3_init(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     int fd;
 
     TRACE_ENTER();
@@ -340,7 +276,7 @@ Bool gsgpu_dri3_init(ScreenPtr pScreen)
     if (!miSyncShmScreenInit(pScreen))
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "Failed to initialize sync support.\n");
+                   "Failed to initialize sync support.\n");
         return FALSE;
     }
 
@@ -358,14 +294,15 @@ Bool gsgpu_dri3_init(ScreenPtr pScreen)
             xf86DrvMsg(pScrn->scrnIndex, X_INFO,"  Description: %s\n", version->desc);
             drmFreeVersion(version);
         }
+
+        lsp->render_node = drmGetDeviceNameFromFd2(fd);
+
         drmClose(fd);
     }
 
-    pDrmMode->dri3_device_name = drmGetDeviceNameFromFd2(pDrmMode->fd);
-
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
                "DRI3 Screen init: device name: %s.\n",
-               pDrmMode->dri3_device_name);
+               lsp->render_node);
 
     TRACE_EXIT();
 

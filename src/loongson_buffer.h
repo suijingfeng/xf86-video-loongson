@@ -29,17 +29,14 @@
 #define LOONGSON_BUFFER_H_
 
 struct LoongsonBuf {
-    void * pDat;
+    void *pDat;
     unsigned int size;
     unsigned int pitch;
     unsigned int width;
     unsigned int height;
 };
 
-
-void LS_AllocBuf(int width, int height,
-        int depth, int bpp, int usage_hint, struct LoongsonBuf *pBuf);
-
+void LS_AllocBuf(int width, int height, int bpp, struct LoongsonBuf *pBuf);
 void LS_FreeBuf(struct LoongsonBuf *pBuf);
 
 #endif

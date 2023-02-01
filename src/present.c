@@ -1,5 +1,6 @@
 /*
- * Copyright © 2014 Intel Corporation
+ * Copyright (C) 2014 Intel Corporation
+ * Copyright (C) 2022 Loongson Corporation
  *
  * Permission to use, copy, modify, distribute, and sell this software and its
  * documentation for any purpose is hereby granted without fee, provided that
@@ -18,6 +19,11 @@
  * DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
  * OF THIS SOFTWARE.
+ */
+
+/*
+ * Authors:
+ *    Sui Jingfeng <suijingfeng@loongson.cn>
  */
 
 #ifdef HAVE_CONFIG_H
@@ -45,6 +51,7 @@
 #include "box.h"
 #include "vblank.h"
 #include "drmmode_display.h"
+#include "loongson_scanout.h"
 #include "loongson_debug.h"
 
 
@@ -336,7 +343,7 @@ static Bool ms_present_check_unflip(RRCrtcPtr crtc,
         drmmode_crtc_private_ptr drmmode_crtc = config->crtc[i]->driver_private;
 
         /* Don't do pageflipping if CRTCs are rotated. */
-        if (drmmode_crtc->rotate_bo.gbm)
+        if (drmmode_crtc->rotate_bo->gbm)
         {
             INFO_MSG("Don't do pageflipping because of CRTCs are rotated");
             return FALSE;
@@ -355,10 +362,11 @@ static Bool ms_present_check_unflip(RRCrtcPtr crtc,
     /* Check stride, can't change that on flip */
     if (ms->atomic_modeset == FALSE)
     {
-        uint32_t fbo_patch = drmmode_bo_get_pitch(&pDrmMode->front_bo);
+        uint32_t fbo_patch = drmmode_bo_get_pitch(pDrmMode->front_bo);
         if (pixmap->devKind != fbo_patch)
         {
-            INFO_MSG("fbo_patch: %d", fbo_patch);
+            INFO_MSG("pixmap->devKind: %d, fbo_patch: %d",
+                     pixmap->devKind, fbo_patch);
             return FALSE;
         }
     }
@@ -579,9 +587,9 @@ static present_screen_info_rec loongson_present_screen = {
 
     .capabilities = PresentCapabilityNone,
     .check_flip = NULL,
-//    .check_flip2 = ls_present_check_flip,
-//    .flip = ls_present_flip,
-//    .unflip = ls_present_unflip,
+    .check_flip2 = ls_present_check_flip,
+    .flip = ls_present_flip,
+    .unflip = ls_present_unflip,
 };
 
 

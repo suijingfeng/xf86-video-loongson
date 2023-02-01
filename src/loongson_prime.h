@@ -34,28 +34,6 @@
 
 #include "drmmode_display.h"
 
-/* OUTPUT SLAVE SUPPORT */
-typedef struct _msPixmapPriv {
-    uint32_t fb_id;
-    /* if this pixmap is backed by a dumb bo */
-    struct dumb_bo *backing_bo;
-    /* OUTPUT SLAVE SUPPORT */
-    DamagePtr slave_damage;
-
-    /** Sink fields for flipping shared pixmaps */
-    int flip_seq; /* seq of current page flip event handler */
-    Bool wait_for_damage; /* if we have requested damage notification from source */
-
-    /** Source fields for flipping shared pixmaps */
-    Bool defer_dirty_update; /* if we want to manually update */
-    PixmapDirtyUpdatePtr dirty; /* cached dirty ent to avoid searching list */
-    DrawablePtr slave_src; /* if we exported shared pixmap, dirty tracking src */
-    Bool notify_on_damage; /* if sink has requested damage notification */
-} msPixmapPrivRec, *msPixmapPrivPtr;
-
-
-void *drmmode_map_slave_bo(drmmode_ptr drmmode, msPixmapPrivPtr ppriv);
-
 Bool LS_SharePixmapBacking(PixmapPtr pPix, ScreenPtr slave, void **handle);
 Bool LS_SetSharedPixmapBacking(PixmapPtr pPix, void *fd_handle);
 void LS_DispatchSlaveDirty(ScreenPtr pScreen);

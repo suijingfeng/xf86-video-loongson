@@ -40,6 +40,7 @@
 #include "dumb_bo.h"
 #include "drmmode_display.h"
 #include "loongson_prime.h"
+#include "loongson_pixmap.h"
 #include "loongson_exa.h"
 
 /* OUTPUT SLAVE SUPPORT */
@@ -61,34 +62,13 @@ static Bool SetSlaveBO(PixmapPtr ppix,
     return TRUE;
 }
 
-/* OUTPUT SLAVE SUPPORT */
-void *drmmode_map_slave_bo(drmmode_ptr drmmode, msPixmapPrivPtr ppriv)
-{
-    int ret;
-
-    if (ppriv->backing_bo->ptr)
-    {
-        return ppriv->backing_bo->ptr;
-    }
-
-    ret = dumb_bo_map(drmmode->fd, ppriv->backing_bo);
-    if (ret)
-    {
-        return NULL;
-    }
-
-    return ppriv->backing_bo->ptr;
-}
-
-
 static int dispatch_dirty_region(ScrnInfoPtr pScrn,
-                                 PixmapPtr pixmap,
                                  DamagePtr damage,
                                  int fb_id)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
     RegionPtr pDirty = DamageRegion(damage);
-    const unsigned int nClipRects = REGION_NUM_RECTS(pDirty);
+    unsigned int nClipRects = REGION_NUM_RECTS(pDirty);
     BoxPtr pRect = REGION_RECTS(pDirty);
     int ret = 0;
 
@@ -96,6 +76,10 @@ static int dispatch_dirty_region(ScrnInfoPtr pScrn,
     {
         drmModeClip *pClip;
         unsigned int i;
+
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s: dispatch %u damage region to fb_id=%d\n",
+                   __func__, nClipRects, fb_id);
 
         pClip = xallocarray(nClipRects, sizeof(drmModeClip));
         if (pClip == NULL)
@@ -140,11 +124,11 @@ void LS_DispatchDirty(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
-    PixmapPtr pixmap = pScreen->GetScreenPixmap(pScreen);
-    int fb_id = lsp->drmmode.fb_id;
+    struct drmmode_rec *pDrmMode = &lsp->drmmode;
+    int fb_id = pDrmMode->fb_id;
     int ret;
 
-    ret = dispatch_dirty_region(pScrn, pixmap, lsp->damage, fb_id);
+    ret = dispatch_dirty_region(pScrn, lsp->damage, fb_id);
     if ((ret == -EINVAL) || (ret == -ENOSYS))
     {
         lsp->dirty_enabled = FALSE;
@@ -183,7 +167,7 @@ void LS_DispatchSlaveDirty(ScreenPtr pScreen)
         {
             // dispatch_dirty_pixmap(pScrn, pCrtc, drmmode_crtc->prime_pixmap);
             ppriv = msGetPixmapPriv(&ms->drmmode, pPix);
-            dispatch_dirty_region(pScrn, pPix, ppriv->slave_damage, ppriv->fb_id);
+            dispatch_dirty_region(pScrn, ppriv->slave_damage, ppriv->fb_id);
         }
 
         pPix = drmmode_crtc->prime_pixmap_back;
@@ -191,7 +175,7 @@ void LS_DispatchSlaveDirty(ScreenPtr pScreen)
         {
             // dispatch_dirty_pixmap(pScrn, pCrtc, drmmode_crtc->prime_pixmap_back);
             ppriv = msGetPixmapPriv(&ms->drmmode, pPix);
-            dispatch_dirty_region(pScrn, pPix, ppriv->slave_damage, ppriv->fb_id);
+            dispatch_dirty_region(pScrn, ppriv->slave_damage, ppriv->fb_id);
         }
     }
 }
@@ -235,7 +219,7 @@ Bool LS_SharePixmapBacking(PixmapPtr pPix, ScreenPtr slave, void **handle)
 
     if (pDrmMode->exa_enabled)
     {
-        ret = ls_exa_shareable_fd_from_pixmap(pScreen, pPix, &stride, &size);
+        ret = loongson_exa_shareable_fd_from_pixmap(pScreen, pPix, &stride, &size);
         if (ret == -1)
         {
             return FALSE;

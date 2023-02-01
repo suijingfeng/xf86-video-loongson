@@ -1,5 +1,6 @@
 /*
- * Copyright © 2007 Red Hat, Inc.
+ * Copyright (C) 2007 Red Hat, Inc.
+ * Copyright (C) 2022 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -57,8 +58,14 @@
 #include "drmmode_crtc_config.h"
 #include "drmmode_output.h"
 
+#include "loongson_buffer.h"
+#include "loongson_rotation.h"
 
-static inline uint32_t * formats_ptr(struct drm_format_modifier_blob *blob)
+#if HAVE_LIBDRM_GSGPU
+#include "gsgpu_bo_helper.h"
+#endif
+
+static inline uint32_t *formats_ptr(struct drm_format_modifier_blob *blob)
 {
     return (uint32_t *)(((char *)blob) + blob->formats_offset);
 }
@@ -70,6 +77,10 @@ modifiers_ptr(struct drm_format_modifier_blob *blob)
     return (struct drm_format_modifier *)(((char *)blob) + blob->modifiers_offset);
 }
 
+static inline int crtc_id(struct drmmode_crtc_private_rec *pCrtc)
+{
+    return pCrtc->mode_crtc->crtc_id;
+}
 
 Bool drmmode_is_format_supported(ScrnInfoPtr scrn, uint32_t format, uint64_t modifier)
 {
@@ -476,64 +487,11 @@ drm_mode_destroy(xf86CrtcPtr crtc, drmmode_mode_ptr mode)
     free(mode);
 }
 
-static int
-drmmode_crtc_can_test_mode(xf86CrtcPtr crtc)
+static int drmmode_crtc_can_test_mode(xf86CrtcPtr crtc)
 {
-    loongsonPtr ms = loongsonPTR(crtc->scrn);
+    loongsonPtr lsp = loongsonPTR(crtc->scrn);
 
-    return ms->atomic_modeset;
-}
-
-/*
- * Return TRUE if success
- */
-static Bool drmmode_crtc_get_fb_id(xf86CrtcPtr crtc,
-                                   uint32_t *fb_id,
-                                   int *x,
-                                   int *y)
-{
-    drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-    drmmode_ptr drmmode = drmmode_crtc->drmmode;
-    int ret;
-
-    *fb_id = 0;
-
-    if (drmmode_crtc->prime_pixmap)
-    {
-        if (1 /* !drmmode->reverse_prime_offload_mode */)
-        {
-            msPixmapPrivPtr ppriv =
-                msGetPixmapPriv(drmmode, drmmode_crtc->prime_pixmap);
-            *fb_id = ppriv->fb_id;
-            *x = 0;
-        } else
-            *x = drmmode_crtc->prime_pixmap_x;
-        *y = 0;
-    }
-    else if (drmmode_crtc->rotate_fb_id)
-    {
-        *fb_id = drmmode_crtc->rotate_fb_id;
-        *x = *y = 0;
-    }
-    else
-    {
-        *fb_id = drmmode->fb_id;
-        *x = crtc->x;
-        *y = crtc->y;
-    }
-
-    if (*fb_id == 0)
-    {
-        ret = drmmode_bo_import(drmmode, &drmmode->front_bo, &drmmode->fb_id);
-        if (ret < 0)
-        {
-            ErrorF("failed to add fb %d\n", ret);
-            return FALSE;
-        }
-        *fb_id = drmmode->fb_id;
-    }
-
-    return TRUE;
+    return lsp->atomic_modeset;
 }
 
 void
@@ -573,7 +531,7 @@ drmmode_set_dpms(ScrnInfoPtr scrn, int dpms, int flags)
             uint32_t fb_id;
             int x, y;
 
-            if (!drmmode_crtc_get_fb_id(crtc, &fb_id, &x, &y))
+            if (!loongson_crtc_get_fb_id(crtc, &fb_id, &x, &y))
                 continue;
             ret |= plane_add_props(req, crtc, fb_id, x, y);
             drmmode_crtc->need_modeset = FALSE;
@@ -618,7 +576,7 @@ static int drmmode_crtc_disable(xf86CrtcPtr crtc)
 static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
 {
     ScrnInfoPtr pScrn = crtc->scrn;
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
     drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
     drmmode_ptr drmmode = drmmode_crtc->drmmode;
@@ -628,17 +586,23 @@ static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
     uint32_t fb_id;
     int x, y;
     int i, ret = 0;
+    Bool res;
 
-    if (drmmode_crtc_get_fb_id(crtc, &fb_id, &x, &y) == FALSE)
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: test only ? %s\n",
+               __func__, test_only ? "Yes" : "No");
+
+    res = loongson_crtc_get_fb_id(crtc, &fb_id, &x, &y);
+
+    if (res == FALSE)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                    "%s: failed get fb id from crtc\n", __func__);
-        return 1;
+                   "%s: failed get fb id from crtc\n", __func__);
+        return -1;
     }
     else
     {
         xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                    "%s: fb_id=%u, x=%d, y=%d\n", __func__, fb_id, x, y);
+                   "%s: fb_id=%u, x=%d, y=%d\n", __func__, fb_id, x, y);
     }
 
 #ifdef GLAMOR_HAS_GBM
@@ -647,7 +611,7 @@ static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
         glamor_finish(crtc->scrn->pScreen);
 #endif
 
-    if (ms->atomic_modeset)
+    if (lsp->atomic_modeset)
     {
         drmModeAtomicReq *req = drmModeAtomicAlloc();
         Bool active;
@@ -660,7 +624,8 @@ static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
         ret |= plane_add_props(req, crtc, active ? fb_id : 0, x, y);
 
         /* Orphaned CRTCs need to be disabled right now in atomic mode */
-        for (i = 0; i < xf86_config->num_crtc; i++) {
+        for (i = 0; i < xf86_config->num_crtc; i++)
+        {
             xf86CrtcPtr other_crtc = xf86_config->crtc[i];
             drmmode_crtc_private_ptr other_drmmode_crtc = other_crtc->driver_private;
             int lost_outputs = 0;
@@ -670,11 +635,13 @@ static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
             if (other_crtc == crtc)
                 continue;
 
-            for (j = 0; j < xf86_config->num_output; j++) {
+            for (j = 0; j < xf86_config->num_output; j++)
+            {
                 xf86OutputPtr output = xf86_config->output[j];
                 drmmode_output_private_ptr drmmode_output = output->driver_private;
 
-                if (drmmode_output->current_crtc == other_crtc) {
+                if (drmmode_output->current_crtc == other_crtc)
+                {
                     if (output->crtc == crtc)
                         lost_outputs++;
                     else
@@ -694,10 +661,12 @@ static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
             flags |= DRM_MODE_ATOMIC_TEST_ONLY;
 
         if (ret == 0)
-            ret = drmModeAtomicCommit(ms->fd, req, flags, NULL);
+            ret = drmModeAtomicCommit(lsp->fd, req, flags, NULL);
 
-        if (ret == 0 && !test_only) {
-            for (i = 0; i < xf86_config->num_output; i++) {
+        if (ret == 0 && !test_only)
+        {
+            for (i = 0; i < xf86_config->num_output; i++)
+            {
                 xf86OutputPtr output = xf86_config->output[i];
                 drmmode_output_private_ptr drmmode_output = output->driver_private;
 
@@ -713,8 +682,8 @@ static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
     }
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                    "%s: number of output=%d\n",
-                    __func__, xf86_config->num_output);
+               "%s: number of output=%d\n",
+               __func__, xf86_config->num_output);
 
     output_ids = calloc(sizeof(uint32_t), xf86_config->num_output);
     if (!output_ids)
@@ -731,7 +700,6 @@ static int drmmode_crtc_set_mode(xf86CrtcPtr crtc, Bool test_only)
         drmmode_output = output->driver_private;
         if (drmmode_output->output_id == -1)
             continue;
-
 
         xf86DrvMsg(pScrn->scrnIndex, X_INFO,
                     "%s: output-%d id=%d\n",
@@ -783,38 +751,7 @@ int drmmode_crtc_flip(xf86CrtcPtr crtc,
                            fb_id, flags, data);
 }
 
-int drmmode_bo_destroy(struct drmmode_rec * const pDrmMode,
-                       struct DrmModeBO * const pBO)
-{
-    int ret;
 
-#ifdef GLAMOR_HAS_GBM
-    if (pBO->gbm)
-    {
-        gbm_bo_destroy(pBO->gbm);
-        pBO->gbm = NULL;
-    }
-#endif
-
-    if (pBO->dumb)
-    {
-        ret = dumb_bo_destroy(pDrmMode->fd, pBO->dumb);
-        if (ret == 0)
-            pBO->dumb = NULL;
-    }
-
-    return 0;
-}
-
-uint32_t drmmode_bo_get_pitch(struct DrmModeBO * const pBO)
-{
-#ifdef GLAMOR_HAS_GBM
-    if (pBO->gbm)
-        return gbm_bo_get_stride(pBO->gbm);
-#endif
-
-    return pBO->dumb->pitch;
-}
 
 static Bool drmmode_bo_has_bo(struct DrmModeBO * const pBO)
 {
@@ -822,6 +759,11 @@ static Bool drmmode_bo_has_bo(struct DrmModeBO * const pBO)
     if (pBO->gbm)
         return TRUE;
 #endif
+
+    if (pBO->gbo)
+    {
+        return TRUE;
+    }
 
     return pBO->dumb != NULL;
 }
@@ -833,10 +775,56 @@ uint32_t drmmode_bo_get_handle(drmmode_bo *bo)
         return gbm_bo_get_handle(bo->gbm).u32;
 #endif
 
-    return bo->dumb->handle;
+    if (bo->dumb)
+        return dumb_bo_handle(bo->dumb);
+
+#ifdef HAVE_LIBDRM_GSGPU
+    if (bo->gbo)
+    {
+         uint32_t kms_handle;
+         gsgpu_bo_export(bo->gbo, gsgpu_bo_handle_type_kms, &kms_handle);
+         return kms_handle;
+    }
+#endif
+
+    xf86Msg(X_ERROR, "%s: drmmode_bo don't have a valid front bo\n", __func__);
+
+    return -1;
 }
 
-static void * drmmode_bo_map(drmmode_ptr drmmode, drmmode_bo *bo)
+void *drmmode_bo_get_cpu_addr(drmmode_bo *bo)
+{
+#ifdef GLAMOR_HAS_GBM
+    if (bo->gbm)
+        return NULL;
+#endif
+
+#ifdef HAVE_LIBDRM_GSGPU
+    if (bo->gbo)
+    {
+        void *cpu_ptr;
+        int ret;
+
+        ret = gsgpu_bo_cpu_map(bo->gbo, &cpu_ptr);
+        if (ret != 0)
+        {
+            return NULL;
+        }
+
+        return cpu_ptr;
+    }
+#endif
+
+    /* TODO: check it is mapped */
+    if (bo->dumb)
+    {
+        return dumb_bo_cpu_addr(bo->dumb);
+    }
+
+    return NULL;
+}
+
+static void *drmmode_bo_map(drmmode_ptr drmmode, drmmode_bo *bo)
 {
     int ret;
 
@@ -845,61 +833,30 @@ static void * drmmode_bo_map(drmmode_ptr drmmode, drmmode_bo *bo)
         return NULL;
 #endif
 
-    if (bo->dumb->ptr)
-        return bo->dumb->ptr;
-
-    ret = dumb_bo_map(drmmode->fd, bo->dumb);
-    if (ret)
-        return NULL;
-
-    return bo->dumb->ptr;
-}
-
-int drmmode_bo_import(drmmode_ptr drmmode, drmmode_bo *bo, uint32_t *fb_id)
-{
-#ifdef GBM_BO_WITH_MODIFIERS
-    loongsonPtr ms = loongsonPTR(drmmode->scrn);
-    if (bo->gbm && ms->kms_has_modifiers &&
-        gbm_bo_get_modifier(bo->gbm) != DRM_FORMAT_MOD_INVALID)
+#ifdef HAVE_LIBDRM_GSGPU
+    if (bo->gbo)
     {
-        int num_fds;
+         void *cpu_ptr;
 
-        num_fds = gbm_bo_get_plane_count(bo->gbm);
-        if (num_fds > 0) {
-            int i;
-            uint32_t format;
-            uint32_t handles[4];
-            uint32_t strides[4];
-            uint32_t offsets[4];
-            uint64_t modifiers[4];
+         ret = gsgpu_bo_cpu_map(bo->gbo, &cpu_ptr);
+         if (ret != 0)
+         {
+             return NULL;
+         }
 
-            memset(handles, 0, sizeof(handles));
-            memset(strides, 0, sizeof(strides));
-            memset(offsets, 0, sizeof(offsets));
-            memset(modifiers, 0, sizeof(modifiers));
-
-            format = gbm_bo_get_format(bo->gbm);
-            format = get_opaque_format(format);
-            for (i = 0; i < num_fds; i++) {
-                handles[i] = gbm_bo_get_handle_for_plane(bo->gbm, i).u32;
-                strides[i] = gbm_bo_get_stride_for_plane(bo->gbm, i);
-                offsets[i] = gbm_bo_get_offset(bo->gbm, i);
-                modifiers[i] = gbm_bo_get_modifier(bo->gbm);
-            }
-
-            return drmModeAddFB2WithModifiers(drmmode->fd, bo->width, bo->height,
-                                              format, handles, strides,
-                                              offsets, modifiers, fb_id,
-                                              DRM_MODE_FB_MODIFIERS);
-        }
+         return cpu_ptr;
     }
 #endif
-    return drmModeAddFB(drmmode->fd, bo->width, bo->height,
-                        drmmode->scrn->depth, drmmode->kbpp,
-                        drmmode_bo_get_pitch(bo),
-                        drmmode_bo_get_handle(bo), fb_id);
-}
 
+    if (bo->dumb)
+    {
+        ret = dumb_bo_map(drmmode->fd, bo->dumb);
+        if (!ret)
+            return dumb_bo_cpu_addr(bo->dumb);
+    }
+
+    return NULL;
+}
 
 static Bool
 drmmode_SharedPixmapPresent(PixmapPtr ppix, xf86CrtcPtr crtc,
@@ -1043,12 +1000,9 @@ drmmode_SharedPixmapFlip(PixmapPtr frontTarget, xf86CrtcPtr crtc,
     return TRUE;
 }
 
-
-
-
-static void
-drmmode_ConvertToKMode(ScrnInfoPtr scrn,
-                       drmModeModeInfo * kmode, DisplayModePtr mode)
+static void drmmode_ConvertToKMode(ScrnInfoPtr pScrn,
+                                   drmModeModeInfo *kmode,
+                                   DisplayModePtr mode)
 {
     memset(kmode, 0, sizeof(*kmode));
 
@@ -1075,7 +1029,8 @@ drmmode_ConvertToKMode(ScrnInfoPtr scrn,
 static void
 drmmode_crtc_dpms(xf86CrtcPtr crtc, int mode)
 {
-    loongsonPtr ms = loongsonPTR(crtc->scrn);
+    ScrnInfoPtr pScrn = crtc->scrn;
+    loongsonPtr lsp = loongsonPTR(pScrn);
     drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
     drmmode_ptr drmmode = drmmode_crtc->drmmode;
 
@@ -1083,10 +1038,16 @@ drmmode_crtc_dpms(xf86CrtcPtr crtc, int mode)
 
     drmmode_crtc->dpms_mode = mode;
 
-    if (ms->atomic_modeset) {
-        if (mode != DPMSModeOn && !ms->pending_modeset)
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "%s: dpms mode=%d\n", __func__, mode);
+
+    if (lsp->atomic_modeset)
+    {
+        if (mode != DPMSModeOn && !lsp->pending_modeset)
             drmmode_crtc_disable(crtc);
-    } else if (crtc->enabled == FALSE) {
+    }
+    else if (crtc->enabled == FALSE)
+    {
         drmModeSetCrtc(drmmode->fd, drmmode_crtc->mode_crtc->crtc_id,
                        0, 0, 0, NULL, 0, NULL);
     }
@@ -1099,7 +1060,7 @@ create_pixmap_for_fbcon(drmmode_ptr drmmode, ScrnInfoPtr pScrn, int fbcon_id)
     PixmapPtr pixmap = drmmode->fbcon_pixmap;
     drmModeFBPtr fbcon;
     ScreenPtr pScreen = xf86ScrnToScreen(pScrn);
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     Bool ret;
 
     if (pixmap)
@@ -1114,14 +1075,19 @@ create_pixmap_for_fbcon(drmmode_ptr drmmode, ScrnInfoPtr pScrn, int fbcon_id)
         fbcon->height != pScrn->virtualY)
         goto out_free_fb;
 
-    pixmap = drmmode_create_pixmap_header(pScreen, fbcon->width,
-                                          fbcon->height, fbcon->depth,
-                                          fbcon->bpp, fbcon->pitch, NULL);
+    pixmap = loongson_pixmap_create_header(pScreen,
+                                           fbcon->width,
+                                           fbcon->height,
+                                           fbcon->depth,
+                                           fbcon->bpp,
+                                           fbcon->pitch,
+                                           NULL);
     if (!pixmap)
         goto out_free_fb;
 
-    ret = ms->glamor.egl_create_textured_pixmap(pixmap, fbcon->handle,
-                                                fbcon->pitch);
+    ret = lsp->glamor.egl_create_textured_pixmap(pixmap,
+                                                 fbcon->handle,
+                                                 fbcon->pitch);
     if (!ret) {
       FreePixmap(pixmap);
       pixmap = NULL;
@@ -1204,13 +1170,56 @@ Bool drmmode_InitSharedPixmapFlipping(xf86CrtcPtr crtc,
     return drmmode_crtc->flipping_active;
 }
 
-Bool drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
-                       Rotation rotation, int x, int y)
+static char *outputs_for_crtc(xf86CrtcPtr crtc, char *outputs, int max)
 {
-    loongsonPtr ms = loongsonPTR(crtc->scrn);
-    xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
+    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
+    int len, i;
+
+    for (i = len = 0; i < config->num_output; i++)
+    {
+        xf86OutputPtr output = config->output[i];
+
+        if (output->crtc != crtc)
+            continue;
+
+        len += snprintf(outputs+len, max-len, "%s, ", output->name);
+    }
+
+    assert(len >= 2);
+    outputs[len-2] = '\0';
+
+    return outputs;
+}
+
+static const char *rotation_to_str(Rotation rotation)
+{
+    switch (rotation & RR_Rotate_MASK)
+    {
+        case 0:
+        case RR_Rotate_0: return "normal";
+        case RR_Rotate_90: return "left";
+        case RR_Rotate_180: return "inverted";
+        case RR_Rotate_270: return "right";
+        default: return "unknown";
+    }
+}
+
+/*
+ * drmmode_set_mode_major() is the only user of drmmode->fb_id and will
+ * create it if necessary.
+ */
+Bool drmmode_set_mode_major(xf86CrtcPtr crtc,
+                            DisplayModePtr mode,
+                            Rotation rotation,
+                            int x,
+                            int y)
+{
+    ScrnInfoPtr pScrn = crtc->scrn;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
     drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
     drmmode_ptr drmmode = drmmode_crtc->drmmode;
+    char outputs[128];
     int saved_x, saved_y;
     Rotation saved_rotation;
     DisplayModeRec saved_mode;
@@ -1223,36 +1232,52 @@ Bool drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
     saved_y = crtc->y;
     saved_rotation = crtc->rotation;
 
-    xf86Msg(X_INFO,
-               "%s: saved_x = %d, saved_y = %d\n",
-               __func__, saved_x, saved_y);
-
-    if (mode) {
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "%s: saved mode: %s, %d, %d, rotation: %s\n",
+               __func__, saved_mode.name, saved_x, saved_y,
+               rotation_to_str(saved_rotation));
+    if (mode)
+    {
         crtc->mode = *mode;
         crtc->x = x;
         crtc->y = y;
         crtc->rotation = rotation;
 
-        if (!xf86CrtcRotate(crtc)) {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s: mode to be set: %s, pos: (%d, %d), rotation: %s\n",
+                   __func__, mode->name, x, y, rotation_to_str(rotation));
+
+        if (!xf86CrtcRotate(crtc))
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                       "%s: xf86CrtcRotate() failed\n", __func__);
             goto done;
         }
+
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s: after xf86CrtcRotate()\n", __func__);
 
         crtc->funcs->gamma_set(crtc, crtc->gamma_red, crtc->gamma_green,
                                crtc->gamma_blue, crtc->gamma_size);
 
         can_test = drmmode_crtc_can_test_mode(crtc);
-        if (drmmode_crtc_set_mode(crtc, can_test)) {
-            xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
-                       "failed to set mode: %s\n", strerror(errno));
+        if (drmmode_crtc_set_mode(crtc, can_test))
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                       "%s: failed to set mode: %s\n", __func__, strerror(errno));
             ret = FALSE;
             goto done;
         } else
             ret = TRUE;
 
-        if (crtc->scrn->pScreen)
-            xf86CrtcSetScreenSubpixelOrder(crtc->scrn->pScreen);
+        if (pScrn->pScreen)
+        {
+            xf86CrtcSetScreenSubpixelOrder(pScrn->pScreen);
+            xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                       "%s: Set Screen Subpixel Order\n", __func__);
+        }
 
-        ms->pending_modeset = TRUE;
+        lsp->pending_modeset = TRUE;
         drmmode_crtc->need_modeset = FALSE;
         crtc->funcs->dpms(crtc, DPMSModeOn);
 
@@ -1260,7 +1285,8 @@ Bool drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
             drmmode_InitSharedPixmapFlipping(crtc, drmmode);
 
         /* go through all the outputs and force DPMS them back on? */
-        for (i = 0; i < xf86_config->num_output; i++) {
+        for (i = 0; i < xf86_config->num_output; i++)
+        {
             xf86OutputPtr output = xf86_config->output[i];
             drmmode_output_private_ptr drmmode_output;
 
@@ -1276,17 +1302,29 @@ Bool drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
         /* if we only tested the mode previously, really set it now */
         if (can_test)
             drmmode_crtc_set_mode(crtc, FALSE);
-        ms->pending_modeset = FALSE;
+        lsp->pending_modeset = FALSE;
     }
 
  done:
-    if (!ret) {
+    if (!ret)
+    {
         crtc->x = saved_x;
         crtc->y = saved_y;
         crtc->rotation = saved_rotation;
         crtc->mode = saved_mode;
-    } else
+    }
+    else
+    {
         crtc->active = TRUE;
+    }
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "switch to mode %dx%d on %s, position (%d, %d), rotation %s\n",
+               mode->HDisplay, mode->VDisplay,
+               outputs_for_crtc(crtc, outputs, sizeof(outputs)),
+               x, y, rotation_to_str(rotation));
+
+    xf86Msg(X_INFO, "\n");
 
     return ret;
 }
@@ -1313,7 +1351,7 @@ drmmode_set_cursor(xf86CrtcPtr crtc)
 {
     drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
     drmmode_ptr drmmode = drmmode_crtc->drmmode;
-    uint32_t handle = drmmode_crtc->cursor_bo->handle;
+    uint32_t handle = dumb_bo_handle(drmmode_crtc->cursor_bo);
     loongsonPtr ms = loongsonPTR(crtc->scrn);
     CursorPtr cursor = xf86CurrentCursor(crtc->scrn->pScreen);
     int ret = -EINVAL;
@@ -1367,7 +1405,7 @@ drmmode_load_cursor_argb_check(xf86CrtcPtr crtc, CARD32 *image)
     uint32_t *ptr;
 
     /* cursor should be mapped already */
-    ptr = (uint32_t *) (drmmode_crtc->cursor_bo->ptr);
+    ptr = (uint32_t *) dumb_bo_cpu_addr(drmmode_crtc->cursor_bo);
 
     for (i = 0; i < ms->cursor_width * ms->cursor_height; i++)
         ptr[i] = image[i];      // cpu_to_le32(image[i]);
@@ -1408,112 +1446,119 @@ drmmode_crtc_gamma_set(xf86CrtcPtr crtc, uint16_t * red, uint16_t * green,
 }
 
 /* OUTPUT SLAVE SUPPORT */
-static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
+static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr pCrtc, PixmapPtr pPix)
 {
-    drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+    ScrnInfoPtr pScrn = pCrtc->scrn;
+    drmmode_crtc_private_ptr drmmode_crtc = pCrtc->driver_private;
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s\n", __func__);
 
     /* Use DisableSharedPixmapFlipping before switching to single buf */
     if (drmmode_crtc->enable_flipping)
         return FALSE;
 
-    return drmmode_set_target_scanout_pixmap(crtc, ppix,
+    return drmmode_set_target_scanout_pixmap(pCrtc, pPix,
                                              &drmmode_crtc->prime_pixmap);
 }
 
+/**
+ * Allocate the shadow area, delay the pixmap creation until needed
+ */
 static void *drmmode_shadow_allocate(xf86CrtcPtr crtc, int width, int height)
 {
     ScrnInfoPtr pScrn = crtc->scrn;
-    struct drmmode_crtc_private_rec * const drmmode_crtc = crtc->driver_private;
-    struct drmmode_rec * const pDrmMode = drmmode_crtc->drmmode;
+    struct drmmode_crtc_private_rec * drmmode_crtc = crtc->driver_private;
+    struct drmmode_rec *pDrmMode = drmmode_crtc->drmmode;
+    struct DrmModeBO *pRotateBO;
     int ret;
-    Bool bo_create_res;
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: %dx%d\n",
                                  __func__, width, height);
 
-#ifdef GLAMOR_HAS_GBM
     if (pDrmMode->glamor_enabled)
     {
-        bo_create_res = ls_glamor_create_gbm_bo(pScrn,
-                                                &drmmode_crtc->rotate_bo,
-                                                width,
-                                                height,
-                                                pDrmMode->kbpp);
+#ifdef GLAMOR_HAS_GBM
+        pRotateBO = ls_glamor_create_gbm_bo(pScrn,
+                                      width,
+                                      height,
+                                      pDrmMode->kbpp);
+        if (!pRotateBO)
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                       "%s: Create Rotated Dumb BO(%dx%d, bpp=%d) failed\n",
+                       __func__, width, height, pDrmMode->kbpp);
+
+            return NULL;
+        }
+        drmmode_crtc->rotate_bo = pRotateBO;
+#endif
     }
     else
-#endif
     {
-        struct DrmModeBO * const pRotateBO = &drmmode_crtc->rotate_bo;
+        pRotateBO = LS_CreateFrontBO(pScrn,
+                                     pDrmMode->fd,
+                                     width,
+                                     height,
+                                     pDrmMode->kbpp);
 
-         pRotateBO->width = width;
-         pRotateBO->height = height;
+        if (!pRotateBO)
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                       "%s: Create Rotated Dumb BO(%dx%d, bpp=%d) failed\n",
+                       __func__, width, height, pDrmMode->kbpp);
 
-         pRotateBO->dumb = dumb_bo_create(pDrmMode->fd,
-                                          width,
-                                          height,
-                                          pDrmMode->kbpp);
-         if (pRotateBO->dumb == NULL)
-         {
-             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                        "%s: Create Rotated Dumb BO(%dx%d, bpp=%d) failed\n",
-                        __func__, width, height, pDrmMode->kbpp);
+            return NULL;
+        }
+        else
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                       "%s: Rotated Dumb BO(handle=%u, %dx%d) created\n",
+                       __func__, dumb_bo_handle(pRotateBO->dumb),
+                       width, height);
+        }
 
-             bo_create_res = FALSE;
-         }
-         else
-         {
-             xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                        "%s: Rotated Dumb BO(%dx%d, bpp=%d) created\n",
-                        __func__, width, height, pDrmMode->kbpp);
-
-             bo_create_res = TRUE;
-         }
-    }
-
-    if (bo_create_res == FALSE)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-               "Couldn't allocate shadow memory for rotated CRTC\n");
-        return NULL;
+        drmmode_crtc->rotate_bo = pRotateBO;
     }
 
     ret = drmmode_bo_import(pDrmMode,
-                            &drmmode_crtc->rotate_bo,
+                            pRotateBO,
                             &drmmode_crtc->rotate_fb_id);
-
     if (ret)
     {
-        ErrorF("failed to add rotate fb\n");
-        drmmode_bo_destroy(pDrmMode, &drmmode_crtc->rotate_bo);
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "failed to add rotate fb\n");
+        drmmode_bo_destroy(pDrmMode, pRotateBO);
+        drmmode_crtc->rotate_bo = NULL;
         return NULL;
     }
 
 #ifdef GLAMOR_HAS_GBM
     if (pDrmMode->glamor_enabled && pDrmMode->gbm)
-        return drmmode_crtc->rotate_bo.gbm;
+        return pRotateBO->gbm;
 #endif
-    return drmmode_crtc->rotate_bo.dumb;
+
+    return pRotateBO->dumb;
 }
 
-
-
+/**
+ * Create shadow pixmap for rotation support
+ */
 static PixmapPtr drmmode_shadow_create(xf86CrtcPtr crtc,
                                        void *data,
                                        int width,
                                        int height)
 {
     ScrnInfoPtr pScrn = crtc->scrn;
-    drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-    drmmode_ptr drmmode = drmmode_crtc->drmmode;
+    struct drmmode_crtc_private_rec *drmmode_crtc = crtc->driver_private;
+    struct drmmode_rec *pDrmMode = drmmode_crtc->drmmode;
+    struct DrmModeBO *pRotateBO = drmmode_crtc->rotate_bo;
     uint32_t rotate_pitch;
     PixmapPtr rotate_pixmap;
     void *pPixData = NULL;
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: %dx%d\n",
-                                 __func__, width, height);
-
     if (!data)
     {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: %d: %dx%d\n",
+                   __func__, __LINE__, width, height);
         data = drmmode_shadow_allocate(crtc, width, height);
         if (!data)
         {
@@ -1523,22 +1568,23 @@ static PixmapPtr drmmode_shadow_create(xf86CrtcPtr crtc,
         }
     }
 
-    if (!drmmode_bo_has_bo(&drmmode_crtc->rotate_bo))
+    if (!drmmode_bo_has_bo(pRotateBO))
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                    "Couldn't allocate shadow pixmap for rotated CRTC\n");
         return NULL;
     }
 
-    pPixData = drmmode_bo_map(drmmode, &drmmode_crtc->rotate_bo);
-    rotate_pitch = drmmode_bo_get_pitch(&drmmode_crtc->rotate_bo);
+    pPixData = drmmode_bo_map(pDrmMode, pRotateBO);
+    rotate_pitch = drmmode_bo_get_pitch(pRotateBO);
 
-    rotate_pixmap = drmmode_create_pixmap_header(pScrn->pScreen,
-                                                 width, height,
-                                                 pScrn->depth,
-                                                 drmmode->kbpp,
-                                                 rotate_pitch,
-                                                 pPixData);
+    rotate_pixmap = loongson_pixmap_create_header(pScrn->pScreen,
+                                                  width,
+                                                  height,
+                                                  pScrn->depth,
+                                                  pDrmMode->kbpp,
+                                                  rotate_pitch,
+                                                  pPixData);
 
     if (rotate_pixmap == NULL)
     {
@@ -1547,17 +1593,16 @@ static PixmapPtr drmmode_shadow_create(xf86CrtcPtr crtc,
         return NULL;
     }
 
-    if (drmmode->exa_enabled)
+    if (pDrmMode->exa_enabled)
     {
-        drmmode_bo *rotate_bo = &drmmode_crtc->rotate_bo;
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "exa: %s\n", __func__);
-        ls_exa_set_pixmap_bo(pScrn, rotate_pixmap, rotate_bo->dumb, FALSE);
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "exa: %s: %d\n", __func__, __LINE__);
+        loongson_set_pixmap_dumb_bo(pScrn, rotate_pixmap, pRotateBO->dumb, CREATE_PIXMAP_USAGE_SCANOUT, -1);
     }
 
 #ifdef GLAMOR_HAS_GBM
-    if (drmmode->glamor_enabled)
+    if (pDrmMode->glamor_enabled)
     {
-        glamor_set_pixmap_bo(pScrn, rotate_pixmap, &drmmode_crtc->rotate_bo);
+        glamor_set_pixmap_bo(pScrn, rotate_pixmap, pRotateBO);
     }
 #endif
 
@@ -1567,31 +1612,36 @@ static PixmapPtr drmmode_shadow_create(xf86CrtcPtr crtc,
 static void
 drmmode_shadow_destroy(xf86CrtcPtr crtc, PixmapPtr rotate_pixmap, void *data)
 {
+    ScrnInfoPtr pScrn = crtc->scrn;
     struct drmmode_crtc_private_rec *drmmode_crtc = crtc->driver_private;
     struct drmmode_rec *drmmode = drmmode_crtc->drmmode;
 
     if (rotate_pixmap)
     {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: %d\n", __func__, __LINE__);
+
         rotate_pixmap->drawable.pScreen->DestroyPixmap(rotate_pixmap);
     }
 
-    if (data) {
+    if (data)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: %d\n", __func__, __LINE__);
+
         drmModeRmFB(drmmode->fd, drmmode_crtc->rotate_fb_id);
         drmmode_crtc->rotate_fb_id = 0;
 
-        drmmode_bo_destroy(drmmode, &drmmode_crtc->rotate_bo);
+        drmmode_bo_destroy(drmmode, drmmode_crtc->rotate_bo);
         memset(&drmmode_crtc->rotate_bo, 0, sizeof drmmode_crtc->rotate_bo);
     }
 }
 
-static void
-drmmode_crtc_destroy(xf86CrtcPtr crtc)
+static void drmmode_crtc_destroy(xf86CrtcPtr crtc)
 {
     drmmode_mode_ptr iterator, next;
     drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-    loongsonPtr ms = loongsonPTR(crtc->scrn);
+    loongsonPtr lsp = loongsonPTR(crtc->scrn);
 
-    if (!ms->atomic_modeset)
+    if (!lsp->atomic_modeset)
         return;
 
     drmmode_prop_info_free(drmmode_crtc->props_plane, DRMMODE_PLANE__COUNT);
@@ -1600,7 +1650,8 @@ drmmode_crtc_destroy(xf86CrtcPtr crtc)
     }
 }
 
-static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
+static const xf86CrtcFuncsRec drmmode_crtc_funcs =
+{
     .dpms = drmmode_crtc_dpms,
     .set_mode_major = drmmode_set_mode_major,
     .set_cursor_colors = drmmode_set_cursor_colors,
@@ -1611,11 +1662,30 @@ static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
 
     .gamma_set = drmmode_crtc_gamma_set,
     .destroy = drmmode_crtc_destroy,
-     /* MODESETTING OUTPUT SLAVE SUPPORT */
-    .set_scanout_pixmap = drmmode_set_scanout_pixmap,
     .shadow_allocate = drmmode_shadow_allocate,
     .shadow_create = drmmode_shadow_create,
     .shadow_destroy = drmmode_shadow_destroy,
+     /* MODESETTING OUTPUT SLAVE SUPPORT */
+    .set_scanout_pixmap = drmmode_set_scanout_pixmap,
+};
+
+static const xf86CrtcFuncsRec loongson_exa_crtc_funcs =
+{
+    .dpms = drmmode_crtc_dpms,
+    .set_mode_major = drmmode_set_mode_major,
+    .set_cursor_colors = drmmode_set_cursor_colors,
+    .set_cursor_position = drmmode_set_cursor_position,
+    .show_cursor_check = drmmode_show_cursor,
+    .hide_cursor = drmmode_hide_cursor,
+    .load_cursor_argb_check = drmmode_load_cursor_argb_check,
+
+    .gamma_set = drmmode_crtc_gamma_set,
+    .destroy = drmmode_crtc_destroy,
+    .shadow_allocate = loongson_rotation_allocate_shadow,
+    .shadow_create = loongson_rotation_create_pixmap,
+    .shadow_destroy = loongson_rotation_destroy,
+     /* MODESETTING OUTPUT SLAVE SUPPORT */
+    .set_scanout_pixmap = drmmode_set_scanout_pixmap,
 };
 
 static uint32_t drmmode_crtc_vblank_pipe(int crtc_id)
@@ -1848,19 +1918,23 @@ static void drmmode_crtc_create_planes(xf86CrtcPtr crtc, int num)
 }
 
 static unsigned int drmmode_crtc_init(ScrnInfoPtr pScrn,
-                                      struct drmmode_rec * pDrmMode,
+                                      struct drmmode_rec *pDrmMode,
                                       drmModeResPtr mode_res,
                                       int num)
 {
     xf86CrtcPtr pCrtc;
     struct drmmode_crtc_private_rec * drmmode_crtc;
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     drmModeObjectPropertiesPtr props;
     int devFD = pDrmMode->fd;
     uint32_t crtcID = mode_res->crtcs[num];
     int ret;
 
-    pCrtc = xf86CrtcCreate(pScrn, &drmmode_crtc_funcs);
+    if (pDrmMode->exa_enabled && !pDrmMode->exa_shadow_enabled)
+        pCrtc = xf86CrtcCreate(pScrn, &loongson_exa_crtc_funcs);
+    else
+        pCrtc = xf86CrtcCreate(pScrn, &drmmode_crtc_funcs);
+
     if (pCrtc == NULL)
     {
         return 0;
@@ -1869,8 +1943,8 @@ static unsigned int drmmode_crtc_init(ScrnInfoPtr pScrn,
     xf86Msg(X_INFO, "\n");
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "%s: mode_res->crtcs[%d] = %d\n",
-                   __func__, num, crtcID);
+               "%s: mode_res->crtcs[%d] = %d\n",
+               __func__, num, crtcID);
 
     // the first parameter is num, the second parameter is size
     drmmode_crtc = xnfcalloc(1, sizeof(struct drmmode_crtc_private_rec));
@@ -1880,12 +1954,12 @@ static unsigned int drmmode_crtc_init(ScrnInfoPtr pScrn,
     pCrtc->driver_private = drmmode_crtc;
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "%s: vblank pipe: %d\n",
-                   __func__, drmmode_crtc->vblank_pipe);
+               "%s: vblank pipe: %d\n",
+               __func__, drmmode_crtc->vblank_pipe);
 
     xorg_list_init(&drmmode_crtc->mode_list);
 
-    if (ms->atomic_modeset)
+    if (lsp->atomic_modeset)
     {
         static const struct drmmode_prop_info_rec crtc_props[] = {
             [DRMMODE_CRTC_ACTIVE] = { .name = "ACTIVE" },
@@ -2110,9 +2184,10 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
     }
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "Up to %d crtcs needed for screen.\n", crtcs_needed);
+               "Up to %d crtcs needed for screen\n", crtcs_needed);
 
-    xf86CrtcSetSizeRange(pScrn, 320, 200, mode_res->max_width,
+    xf86CrtcSetSizeRange(pScrn, 320, 200,
+                         mode_res->max_width,
                          mode_res->max_height);
 
     for (i = 0; i < mode_res->count_crtcs; i++)
@@ -2156,90 +2231,6 @@ void drmmode_adjust_frame(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int x, int y)
     }
 }
 
-
-Bool drmmode_set_desired_modes(ScrnInfoPtr pScrn,
-                               drmmode_ptr drmmode,
-                               Bool set_hw)
-{
-    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
-    int nCrtc = config->num_crtc;
-    int c;
-
-    xf86Msg(X_INFO, "\n");
-    xf86Msg(X_INFO, "%s: %d crtc\n", __func__, nCrtc);
-
-    for (c = 0; c < nCrtc; ++c)
-    {
-        xf86CrtcPtr crtc = config->crtc[c];
-        drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-        xf86OutputPtr output = NULL;
-        int o;
-
-        /* Skip disabled CRTCs */
-        if (!crtc->enabled)
-        {
-            if (set_hw)
-            {
-                drmModeSetCrtc(drmmode->fd, drmmode_crtc->mode_crtc->crtc_id,
-                               0, 0, 0, NULL, 0, NULL);
-            }
-            continue;
-        }
-
-        if (config->output[config->compat_output]->crtc == crtc)
-            output = config->output[config->compat_output];
-        else
-        {
-            for (o = 0; o < config->num_output; o++)
-                if (config->output[o]->crtc == crtc)
-                {
-                    output = config->output[o];
-                    break;
-                }
-        }
-        /* paranoia */
-        if (!output)
-            continue;
-
-        /* Mark that we'll need to re-set the mode for sure */
-        memset(&crtc->mode, 0, sizeof(crtc->mode));
-        if (!crtc->desiredMode.CrtcHDisplay) {
-            DisplayModePtr mode =
-                xf86OutputFindClosestMode(output, pScrn->currentMode);
-
-            if (!mode)
-                return FALSE;
-            crtc->desiredMode = *mode;
-            crtc->desiredRotation = RR_Rotate_0;
-            crtc->desiredX = 0;
-            crtc->desiredY = 0;
-        }
-
-        if (set_hw)
-        {
-            if (!crtc->funcs->
-                set_mode_major(crtc, &crtc->desiredMode, crtc->desiredRotation,
-                               crtc->desiredX, crtc->desiredY))
-                return FALSE;
-        }
-        else
-        {
-            crtc->mode = crtc->desiredMode;
-            crtc->rotation = crtc->desiredRotation;
-            crtc->x = crtc->desiredX;
-            crtc->y = crtc->desiredY;
-            if (!xf86CrtcRotate(crtc))
-                return FALSE;
-        }
-    }
-
-    /* Validate leases on VT re-entry */
-    drmmode_validate_leases(pScrn);
-
-    xf86Msg(X_INFO, "\n");
-
-    return TRUE;
-}
 
 static void drmmode_load_palette(ScrnInfoPtr pScrn, int numColors,
                      int *indices, LOCO * colors, VisualPtr pVisual)
@@ -2324,64 +2315,4 @@ Bool drmmode_setup_colormap(ScreenPtr pScreen, ScrnInfoPtr pScrn)
     }
 
     return TRUE;
-}
-
-
-
-/* ugly workaround to see if we can create 32bpp */
-void drmmode_get_default_bpp(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int *depth,
-                        int *bpp)
-{
-    drmModeResPtr mode_res;
-    uint64_t value;
-    struct dumb_bo *bo;
-    uint32_t fb_id;
-    int ret;
-
-    /* 16 is fine */
-    ret = drmGetCap(drmmode->fd, DRM_CAP_DUMB_PREFERRED_DEPTH, &value);
-    if (!ret && (value == 16 || value == 8))
-    {
-        *depth = value;
-        *bpp = value;
-        return;
-    }
-
-    *depth = 24;
-    mode_res = drmModeGetResources(drmmode->fd);
-    if (!mode_res)
-        return;
-
-    // workaround kernel bug reporting 0x0 as valid mins
-    // It reports these but then you can't create a 0 sized bo.
-    if (mode_res->min_width == 0)
-        mode_res->min_width = 1;
-    if (mode_res->min_height == 0)
-        mode_res->min_height = 1;
-    /*create a bo */
-    bo = dumb_bo_create(drmmode->fd, mode_res->min_width, mode_res->min_height,
-                        32);
-    if (!bo)
-    {
-        *bpp = 24;
-        goto out;
-    }
-
-    ret = drmModeAddFB(drmmode->fd, mode_res->min_width, mode_res->min_height,
-                       24, 32, bo->pitch, bo->handle, &fb_id);
-
-    if (ret)
-    {
-        *bpp = 24;
-        dumb_bo_destroy(drmmode->fd, bo);
-        goto out;
-    }
-
-    drmModeRmFB(drmmode->fd, fb_id);
-    *bpp = 32;
-
-    dumb_bo_destroy(drmmode->fd, bo);
- out:
-    drmModeFreeResources(mode_res);
-    return;
 }

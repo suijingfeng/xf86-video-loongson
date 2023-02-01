@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,7 +24,6 @@
  *    Sui Jingfeng <suijingfeng@loongson.cn>
  */
 
-
 #ifndef LOONGSON_SHADOW_H_
 #define LOONGSON_SHADOW_H_
 
@@ -32,7 +31,13 @@
 
 Bool LS_ShadowLoadAPI(ScrnInfoPtr pScrn);
 
-Bool LS_ShadowAllocFB(ScrnInfoPtr pScrn, void **ppShadowFB);
+Bool LS_ShadowAllocFB(ScrnInfoPtr pScrn,
+                      int width,
+                      int height,
+                      int bpp,
+                      void **ppShadowFB);
+
+
 void LS_ShadowFreeFB(ScrnInfoPtr pScrn, void **ppShadowFB);
 
 void LS_TryEnableShadow(ScrnInfoPtr pScrn);
@@ -42,4 +47,5 @@ void *LS_ShadowWindow(ScreenPtr pScreen, CARD32 row, CARD32 offset,
 
 void LS_ShadowUpdatePacked(ScreenPtr pScreen, shadowBufPtr pBuf);
 
+void loongson_dispatch_dirty(ScreenPtr pScreen);
 #endif

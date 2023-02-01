@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,48 +36,6 @@
 #include "loongson_buffer.h"
 #include "loongson_debug.h"
 #include "loongson_pixmap.h"
-
-//
-// For pixmaps that are scanout, backing for windows or bigger than,
-// "accelerate" them by allocating them via GEM.
-//
-// For all other pixmaps where we never expect DRI2 CreateBuffer to
-// be called. We just malloc them, which turns out to be much faster.
-//
-// return TRUE if it is a dumb, return FALSE otherwise.
-
-Bool LS_IsDumbPixmap(int usage_hint)
-{
-    if (usage_hint == CREATE_PIXMAP_USAGE_BACKING_PIXMAP)
-    {
-        return TRUE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_SHARED)
-    {
-        return TRUE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_GLYPH_PICTURE)
-    {
-        // TODO : debug this
-        // suijingfeng: bad looking if using dumb, strange !
-        return FALSE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_SCRATCH)
-    {
-        return FALSE;
-    }
-
-    if (usage_hint == CREATE_PIXMAP_USAGE_SCANOUT)
-    {
-        return TRUE;
-    }
-
-    return TRUE;
-}
-
 
 ////////////////////////////////////////////////////////////////////////////
 //                Only allocate DRI2/DRI3 pixmaps with GEM
@@ -131,17 +89,15 @@ void *LS_CreateExaPixmap(ScreenPtr pScreen,
 
     priv->usage_hint = usage_hint;
     priv->is_dumb = FALSE;
-
+    priv->is_gtt = FALSE;
     if ((width > 0) && (height > 0) && (depth > 0) && (bitsPerPixel > 0))
     {
-        // DEBUG_MSG ( "Create Exa Pixmap %dx%d %d %d",
-        //        width, height, depth, bitsPerPixel);
-
-        LS_AllocBuf(width, height, depth, bitsPerPixel, usage_hint, priv->pBuf);
+        LS_AllocBuf(width, height, bitsPerPixel, priv->pBuf);
         if (NULL == priv->pBuf->pDat)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                    "failed to allocate %dx%d mem", width, height);
+                       "failed to allocate %dx%d %d bpp pixmap",
+                       width, height, bitsPerPixel);
 
             free(priv->pBuf);
             free(priv);
@@ -163,21 +119,16 @@ void *LS_CreateExaPixmap(ScreenPtr pScreen,
 
 void LS_DestroyExaPixmap(ScreenPtr pScreen, void *driverPriv)
 {
-    // ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    // modesettingPtr ms = loongsonPTR(pScrn);
-
     struct exa_pixmap_priv *priv = (struct exa_pixmap_priv *)driverPriv;
+    struct LoongsonBuf *pBuf = priv->pBuf;
 
-    // struct LoongsonBuf * pBuf = &priv->buf;
+    TRACE_ENTER();
 
-    LS_FreeBuf(priv->pBuf);
+    LS_FreeBuf(pBuf);
 
     free(priv->pBuf);
-    free(priv);
 
-#ifdef FAKE_EXA_DEBUG
-    INFO_MSG("Destroy EXA Pixmap buf: %p", pBuf->pDat);
-#endif
+    TRACE_EXIT();
 }
 
 
@@ -228,13 +179,15 @@ void *LS_CreateDumbPixmap(ScreenPtr pScreen,
         return NULL;
     }
 
-    priv->owned = TRUE;
     priv->is_dumb = TRUE;
-    priv->pitch = priv->bo->pitch;
+    priv->pitch = dumb_bo_pitch(priv->bo);
 
     if (new_fb_pitch)
     {
         *new_fb_pitch = priv->pitch;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s: %dx%d, pitch=%d bo\n",
+                   __func__, width, height, priv->pitch);
     }
 
     return priv;
@@ -251,9 +204,10 @@ void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
     if (priv->fd > 0)
     {
         close(priv->fd);
+        priv->fd = 0;
     }
 
-    if ((priv->is_dumb == TRUE) && (priv->bo != NULL))
+    if (priv->bo)
     {
         dumb_bo_destroy(pDrmMode->fd, priv->bo);
 
@@ -264,13 +218,13 @@ void LS_DestroyDumbPixmap(ScreenPtr pScreen, void *driverPriv)
 }
 
 
-PixmapPtr drmmode_create_pixmap_header(ScreenPtr pScreen,
-                                       int width,
-                                       int height,
-                                       int depth,
-                                       int bitsPerPixel,
-                                       int devKind,
-                                       void *pPixData)
+PixmapPtr loongson_pixmap_create_header(ScreenPtr pScreen,
+                                        int width,
+                                        int height,
+                                        int depth,
+                                        int bitsPerPixel,
+                                        int devKind,
+                                        void *pPixData)
 {
     PixmapPtr pixmap;
 
@@ -280,7 +234,7 @@ PixmapPtr drmmode_create_pixmap_header(ScreenPtr pScreen,
     if (pixmap)
     {
         if (pScreen->ModifyPixmapHeader(pixmap, width, height, depth,
-                                           bitsPerPixel, devKind, pPixData))
+                                        bitsPerPixel, devKind, pPixData))
         {
             return pixmap;
         }
@@ -289,4 +243,12 @@ PixmapPtr drmmode_create_pixmap_header(ScreenPtr pScreen,
     }
 
     return NullPixmap;
+}
+
+
+uint64_t loongson_pixmap_get_tiling_info(PixmapPtr pPixmap)
+{
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
+
+    return priv->tiling_info;
 }

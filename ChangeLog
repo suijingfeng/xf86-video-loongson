@@ -1,0 +1,3371 @@
+commit 95f9596eb19223c3109ea1f32c3e086fd1d43bd8
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Jan 15 16:45:48 2023 +0800
+
+    etnaviv: call etna_bo_cpu_prep() before access the buffer from the cpu side
+    
+    to fix the rendering artifical visiable when run qt5 demos
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 1aa910c4fe69551fc9754550ba46608e801b6515
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Jan 15 15:18:30 2023 +0800
+
+    etnaviv: fix warnning from etnaviv mesa side
+    
+    cd /usr/lib/loongarch64-linux-gnu/qt5/examples/opengl/2dpainting
+    ./2dpainting
+    
+    etna_resource_from_handle:548: BO stride 16 is too small for RS engine width padding (64, format PIPE_FORMAT_B8G8R8X8_UNORM)
+    etna_resource_from_handle:548: BO stride 16 is too small for RS engine width padding (64, format PIPE_FORMAT_B8G8R8X8_UNORM)
+    etna_resource_from_handle:548: BO stride 16 is too small for RS engine width padding (64, format PIPE_FORMAT_B8G8R8X8_UNORM)
+    etna_resource_from_handle:548: BO stride 16 is too small for RS engine width padding (64, format PIPE_FORMAT_B8G8R8X8_UNORM)
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 047dd4cdc808789f107faf9c86341eb6ac2f130f
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Jan 14 00:02:56 2023 +0800
+
+    update readme
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 063d03e4d7f46f1db90358005d79d082cef4bccb
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Jan 13 19:34:19 2023 +0800
+
+    etnaviv: add MSA version of supertile resolve argorithm
+    
+     we probe if MSA support is present, if present we use it implement
+     supertile resolve.
+    
+     on 3a4000 + ls7a1000, change the 20-loongson.conf as following:
+    
+    Section "OutputClass"
+            Identifier      "LOONGSON-DC"
+            MatchDriver     "loongson-drm"
+            Driver          "loongson"
+            Option          "PrimaryGPU"    "true"
+            Option          "AccelMethod"   "exa"
+            Option          "ExaType"       "etnaviv"
+            Option          "SWcursor"      "true"
+            Option          "ShadowFB"      "false"
+            Option          "PageFlip"      "false"
+    EndSection
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 7defbbf98f5289f677c2f3df0c6612ca146fbb79
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jan 10 19:15:28 2023 +0800
+
+    add chipset detection support
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 729cfbe40987cf6c5ef2e84834750bd3e6d7866e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Jan 8 13:24:30 2023 +0800
+
+    support build without libdrm_gsgpu and/or libdrm_etnaviv
+    
+    Because on a fresh system, there is no libdrm_gsgpu
+    
+    configure: error: Building with gsgpu backend requested but libdrm_gsgpu not found
+    
+    this problem can be solved by run:
+    
+     ./autogen.sh --prefix=/usr --disable-gsgpu
+    
+    if no libdrm_etnaviv, run:
+    
+     ./autogen.sh --prefix=/usr --disable-etnaviv
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 72b980e7b6adfc4f345eb83911c04252da3a47a4
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Jan 2 21:45:24 2023 +0800
+
+    exa+etnaviv: add supertile resolve algorithm
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit ec5bf29d72ca36940f2765456ed2869d164908af
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Jan 5 18:05:45 2023 +0800
+
+    create the front buffer object on runtime
+    
+     1) Create the front buffer object on runtime instead of to embedded
+        them into struct drmmode_rec.
+     2) Provide dumb bo related helpers, code outside dumb_bo.c should
+        use those helpers instead poking into the internal member of
+        struct dumb bo.
+     3) Update copyright for different programmer use different editors,
+        commit code result mess.
+     4) Split damage create and destroy to a loongson_damage.c
+     5) Remove double shadow support, double shadow is for BMC card
+        on remote desktop application. Single shadow buffer is enough
+        for daily usage on ls7a1000/ls7a2000/ls2k1000/ls2k2000
+     6) various improvement and code clean
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 7a9044400a27d308fae17a3e07c35b901e87947f
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jan 3 09:36:16 2023 +0800
+
+    exa: gsgpu: free the resource allocated in gsgpu_exa_create_pixmap
+    
+    This patch fix memory leaking problem which can be observed when
+    run x11perf -trapezoid.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit ace7b79a973210df8eb56a76e0a6b1e9acd5bd17
+Author: wuqianhai <wuqianhai@loongson.cn>
+Date:   Wed Dec 21 12:38:30 2022 +0800
+
+    gsgpu: Fix gsgpu resolve BUG.
+    
+    1. at t = 2,r = 2,height = 1, xorg broken.
+    
+    Signed-off-by: wuqianhai <wuqianhai@loongson.cn>
+
+commit fc11de9865d1bac2fee13211f1d2c5ad2c283a02
+Author: yeyuxi <yeyuxi@loongson.cn>
+Date:   Wed Dec 21 11:18:57 2022 +0800
+
+    modify the name of GLX library to loongson
+    
+    Signed-off-by: yeyuxi <yeyuxi@loongson.cn>
+
+commit 242ce57477f636ab46789d1db1c614c0fb8287fe
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Dec 20 16:15:16 2022 +0800
+
+    add support for ls2k2000
+    
+    gsgpu in ls2k2000 have a pci class 0x030200,
+    add it to supported list, otherwise this driver
+    will reject it.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit acb5fb894fce531788d8f1994bb4dbe34e1f8dd6
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Tue Dec 6 15:22:00 2022 +0800
+
+    configure.ac: allow build with --disable-etnaviv --disable-gsgpu
+    
+     This patch just clean the configure.ac only, the src code is left unchanged
+    
+     run ./autogen.sh --prefix=/usr --disable-etnaviv --disable-gsgpu
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit ee37b5c165d5f90969ef97bd16eae332dcbdc1e5
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Dec 6 11:12:46 2022 +0800
+
+    exa: etnaviv: slience the debug message
+    
+    (II) lsx_resolve_etnaviv_tile_4x4: src stride=800, dst stride=812, src addr: 0xffd4340000, dst addr: 0xffd4759618
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 40a9e89377fa69bda1152abe9f20c04ba924602e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Dec 5 11:07:57 2022 +0800
+
+    mark the shared pximap via DRI3 as CREATE_PIXMAP_USAGE_DRI3
+    
+     instead of CREATE_PIXMAP_USAGE_SHARED, because
+     CREATE_PIXMAP_USAGE_SHARED belong to X server we don't fully understand
+     its purpose and usage hint. using our own flag to mark to make
+     distinguish.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 90c42bc489f2b7f551f33d3056bcd2161810ce3a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Dec 5 04:33:15 2022 +0800
+
+    set the priv->fd to 0 if it is closed
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit e2969ae8f87d2f6ac8ebb579a43bf0e1089443c7
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Dec 4 05:10:45 2022 +0800
+
+    exa: add sharing tiled buffer and software resolve implement for etanviv
+    
+     The software resolve algorithm is based on LoongArch LSX SIMD
+    
+     shading tiled buffer to cpu side is novel.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 8fef6f9a2a8c8deacdd171ede45ee8f4d0adf6cd
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Dec 4 01:11:04 2022 +0800
+
+    log: improve Xorg.0.log
+    
+    Before:
+    
+     (II) loongson(0):
+     (II) loongson(0): -------- LS_CreateScreenResources stated --------
+    
+    After:
+    
+     (II)
+     (II) -------- LS_CreateScreenResources stated --------
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit d83b5ac8a5a96bd6618111c874a2ca4f437cb450
+Author: Sui Jingfeng <suijingfeng@suijingfeng@loongson.cn>
+Date:   Mon Nov 28 02:11:09 2022 +0800
+
+    fix etnaviv on ls2k1000
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@suijingfeng@loongson.cn>
+
+commit 2526d9abf5322182b2340ad3b224b71d3daecaf0
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 24 20:57:38 2022 +0800
+
+    Add runtime loongarch SIMD detection support
+    
+     Because the gcc compiler on ls2k1000la pretend to have LASX support,
+     but ls2k1000la itself don't have LASX support actually,
+     we must implement runtime SIMD detection.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 7287d3cb858b277da9e66aac051988dfca61ef71
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 24 18:29:18 2022 +0800
+
+    provide lsx_blt_one_line_u8 to fix black screen on ls2k1000la
+    
+     because ls2k1000la don't have lasx support.
+    
+      There will have illegal instruction in Xorg.0.log
+    
+     (EE)
+     (EE) Backtrace:
+     (EE) 0: /usr/lib/xorg/Xorg (xorg_backtrace+0x70) [0x55561f0084]
+     (EE) 1: /usr/lib/xorg/Xorg (0x5556000000+0x1f43f0) [0x55561f43f0]
+     (EE) 2: linux-vdso.so.1 (0x7ffd500000+0x8a0) [0x7ffd5008a0]
+     (EE) 3: /usr/lib/xorg/modules/drivers/loongson_drv.so (0x7ff5d60000+0x22930) [0x7ff5d82930]
+     (EE) 4: /usr/lib/xorg/modules/drivers/loongson_drv.so (0x7ff5d60000+0xd2f4) [0x7ff5d6d2f4]
+     (EE) 5: /usr/lib/xorg/Xorg (InitOutput+0x968) [0x55560cdaa8]
+     (EE) 6: /usr/lib/xorg/Xorg (0x5556000000+0x8e3a0) [0x555608e3a0]
+     (EE) 7: /lib/loongarch64-linux-gnu/libc.so.6 (__libc_start_main+0xe4) [0x7ff662d630]
+     (EE) 8: /usr/lib/xorg/Xorg (_start+0x6c) [0x5556076cec]
+     (EE)
+     (EE) Illegal instruction at address 0x0
+     (EE)
+    
+    Aftrer apply this patch, build with following method solve above problem
+    
+        ./autogen --prefix=/usr --disable-lasx
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 5134f3c72c7c239d55f1975ebd7bf26d028d97b7
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Nov 23 15:15:35 2022 +0800
+
+    configure.ac: detect if lasx is supported by the cpu on compile time
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 1e8ca691ee601aa23dea3d1ab66192b74fd5b6ac
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Mon Nov 21 01:36:50 2022 +0800
+
+    gsgpu+exa: implement new rotation hooks
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 0c1669b1e47fd4ab579473c88e5cf1ebeec8646a
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sat Nov 19 23:41:02 2022 +0800
+
+    code clean
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 0843dc7f447e54aae1c3034855b6cc3cbf7bb4fb
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sat Nov 19 22:30:47 2022 +0800
+
+    make dumb bo have more priority
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 1041c08863e5e6e5c172c19aec7442e5591d0d58
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Nov 19 17:18:56 2022 +0800
+
+    remove duplicate implement of gsgpu_set_pixmap_bo
+    
+    move them to gsgpu_bo_helper.c
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 7970721e4eb80b6ae3995624c8ab742dc4fa76cf
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Nov 16 09:38:38 2022 +0800
+
+    configure.ac: print Xorg Video ABI version and pixmap version
+    
+    add debug definition
+    
+    Before:
+    
+            prefix:              /usr
+            exec_prefix:         ${prefix}
+            libdir:              ${exec_prefix}/lib
+            includedir:          ${prefix}/include
+            configdir:           ${prefix}/share/X11/xorg.conf.d
+    
+    After:
+    
+    xf86-video-loongson 0.2.0 will be compiled with:
+            Xorg Video ABI version: 24.1 (xorg-server-1.20.11)
+            pixman version: pixman-1-0.36.0
+            prefix:              /usr
+            exec_prefix:         ${prefix}
+            libdir:              ${exec_prefix}/lib
+            includedir:          ${prefix}/include
+            configdir:           ${prefix}/share/X11/xorg.conf.d
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 859238258fd9c52fb763ee8460d116a5c04f4803
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sat Nov 19 00:41:43 2022 +0800
+
+    exa+shadowfb: avoid conflict usage on lsp->damage
+    
+     Both LS_DispatchDirty() and loongson_dispatch_dirty() will call
+     DamageEmpty(lsp->damage), therefore they conflict, LS_DispatchDirty()
+     is report the damage to gsgpu kernel driver via drmModeDirtyFB which
+     is slow and introduce very much overhead.
+    
+     Currently, we don't need call LS_DispatchDirty().
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 87b3c1c5c0b95ebfb27216d4dd175847302c753f
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Fri Nov 18 21:35:43 2022 +0800
+
+    Don't change the width of the front bo when resize fb
+    
+     It is not necessary for ls7a2000
+     ls7a2000 can scanout from non-256 byte aligned stride.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 64a2da3b5802101c50b2c1f9f486229f389c454a
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Fri Nov 18 15:01:58 2022 +0800
+
+    Modify pixmap header is alway necessary
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 8c07430cd9117bb4200984b8fc716dc8ab20c4c5
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Fri Nov 18 12:08:23 2022 +0800
+
+    call ls_dirty_update if pixmap_dirty_list is not empty
+    
+     we actually don't need ls_dirty_update at normal usage.
+    
+     we add a print to see when it is NOT empty.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 1faaa1b5d67e041b8b3b56549e4a20c8b6402548
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 17 22:01:39 2022 +0800
+
+    log: only printing if there really have dirty region
+    
+    Before:
+    
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+      ...
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+    (--) LS_DispatchDirty: dispatch dirty to root pixmap(0x1232e9500), fb_id=93
+    
+    After:
+    
+    (II) LS_BlockHandler_Oneshot begin
+    (II) loongson(0): dispatch_dirty_region: dispatch 1 damage region to fb_id=0
+      ...
+    (II) LS_BlockHandler_Oneshot finished
+    
+    (II) loongson(0): dispatch_dirty_region: dispatch 1 damage region to fb_id=50
+    (II) loongson(0): Disabling kernel dirty updates, not required.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit ddbbe49948fea0d5af8df35870fda37dae7d6e94
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Fri Nov 11 18:04:07 2022 +0800
+
+    improve chip identify
+    
+    Before:
+    
+    (II) loongson: Userspace driver for Kernel Drivers: loongson-drm, lsdc,
+          gsgpu
+    
+    After:
+    
+    (II) loongson: Xorg driver for Loongson(R) Integrated Graphics Chipsets:
+          ls7a1000, ls7a2000, ls2k1000, ls2k0500
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 2c69fb01e5767ce564d4d973817e267c7f8b6e54
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 10 20:41:16 2022 +0800
+
+    use loongson_damage_update_u32() instead of LS_ShadowUpdate32()
+    
+    loongson_damage_update_u32() is more clear and have SIMD acceleration,
+    say lasx_blt_one_line_u8.
+    
+    We want one function rules them all,
+    commit a148e8fe6927b051e8129b6fee39135500b23ca2 is for this.
+    
+    tested on shadowfb backend and exa + gsgpu + shadowfb backend.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 0ee966234a14593f0f3d64a030dc7c51c6f08b0f
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 10 12:03:40 2022 +0800
+
+    fix warnnings
+    
+    loongson_dri3.c: In function 'LS_DRI3_Init':
+    loongson_dri3.c:337:32: warning: unused variable 'pDrmMode' [-Wunused-variable]
+         struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+                                    ^~~~~~~~
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit c12aa87c712ddce68f6a01199f2af004e39b7b96
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 10 17:52:26 2022 +0800
+
+    fix EXA bug: pPixmap->devPrivate.ptr was 0xffe4c30010
+    
+     It should have been NULL
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 85c70a867cfe251df0309fbb8da00d2b322b9c6f
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 10 17:49:19 2022 +0800
+
+    LS_DispatchDirty is not required on exa + shadowfb
+    
+    this patch is a workaround to fix overwheeling log at Xorg.0.log
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit a54960912ed04708065e7622d8cd8e3b6c059680
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 10 17:04:01 2022 +0800
+
+    exa+gsgpu: open shadowfb to workaround rotation screen problem
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit a148e8fe6927b051e8129b6fee39135500b23ca2
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Nov 9 21:45:50 2022 +0800
+
+    make shadowfb update method generic
+    
+      when this driver is used with gsgpu:
+    
+      when shadowfb is open, x server will draw to shadowfb first
+    
+      exa + fake + shadowfb can be used on ls7a1000/ls7a2000 with loongson-drm
+      exa + gsgpu + shadowfb can be used on ls7a2000 with gsgpu
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 4e8533df9b64b4e51913bbd9d9e03a560c1817d7
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Nov 9 16:16:38 2022 +0800
+
+    gsgpu: exa: enable upload to screen and download from screen
+    
+     Bugs of gsgpu_exa_upload_to_screen() and gsgpu_exa_download_from_screen
+     have been fixed.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 80119dd408f1444a1ebe9bc78c3ef3c458007da6
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Nov 9 11:19:51 2022 +0800
+
+    make exa+fake backend works with loongson-drm and gsgpu kernel space driver
+    
+     This patch also fix download from screen bug which cause screen shot crash
+    
+     Recongize that if a bo is dumb or a pixmap don't have a priv,
+     it is likely that it is front bo or shadow of front bo,
+     X server will access it through its life time, no need to unmap it
+     at finished access function.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 8318ba6e2760420d851dd7ff7412ba9caf4e59b2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Nov 8 02:21:11 2022 +0800
+
+    drmmode_display: print more information about userspace modeset
+    
+    after apply this patch, Xorg.0.log will something like below:
+    
+    loongson(0): switch to mode 1024x768 on VGA-1, position (0, 0), rotation normal
+     ...
+    loongson(0): switch to mode 1024x768 on HDMI-1, position (0, 0), rotation normal
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 23bf625fdb73477c612ed657c7c6520c7048eb2c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Nov 8 02:13:28 2022 +0800
+
+    allow specify usage hit via loongson_set_pixmap_dumb_bo
+    
+    This patch no functional change, just refactor and code cleanup,
+    prepare for future development
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit adfdb1840c1fad7cca2c62536a6f722a0a5df3ee
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Nov 8 01:54:15 2022 +0800
+
+    provide a better memcpy using lasx and lsx
+    
+      lasx_blt_one_line_u8() is better because it is aligned to cache line.
+    
+      it can be used on the cpu who support lasx.
+    
+      it is cpu dependent not gpu dependent.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit cff17371612de2efd554d0e79e03787ba98c7f43
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Tue Nov 8 20:26:17 2022 +0800
+
+    disable exa acceleration on uos
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit d628de028e52df5843fede45a5d8ae1dd6955d8d
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Tue Nov 8 10:53:00 2022 +0800
+
+    gsgpu: should renderer to shadowfb instead of dumb when shadowfb is enabled
+    
+    1) Recongize that when shadowfb is enabled, we should renderer to
+       the shadow of the dumb bo, not the dumb it self.
+    
+    2) the pixman have priv, we don't mark it as offscreen,
+       prepare access will call down, the ugly workaround is
+       still needed.
+    
+    3) Recongize that if a bo is dumb or don't have a priv,
+       it is likely that it is front bo or shadow of front bo,
+       x server will access it through its life time, no need
+       to unmap it.
+    
+       this patch fix glmakr2 flicking bug introduced by
+       commit 95adde06be2c17cde14a5fc2f2a536541da28cd1
+    
+       Sorry.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 95adde06be2c17cde14a5fc2f2a536541da28cd1
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Nov 7 23:49:30 2022 +0800
+
+    gsgpu: exa+shadowfb: fix black screen problem at user login
+    
+     We should call pScreen->ModifyPixmapHeader() to let X Server know
+     where is the shadow buffer of the true front framebuffer.
+    
+     Beside, this patch fix a ugly workaround introduce at commit
+     e10a658b6e55af109a46e352367220fdc4225ecd
+    
+       gsgpu: optimization gsgpu using feeling on UOS system
+    
+     After kill that workaround, the code looks fine now.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 1aa62394c9e2bc6d2cb905822aa78fb47e5421f1
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Nov 7 23:41:37 2022 +0800
+
+    git: ignore the git_version.h
+    
+    It is auto generate everytime you rebuild the software.
+    it change with the head git commit.
+    
+    it is a noise when you run git status
+    
+    This patch fix 49cb135a9065bf4487e1b0a43d51dcd5feca92e6
+        xf86-video-loongson: add git commit show HEAD support.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit bc5474c7c5862509cee234b24943278cbef0f4e4
+Author: wuqianhai <wuqianhai@loongson.cn>
+Date:   Fri Nov 4 16:34:11 2022 +0800
+
+    20-gsgpu-conf: rename the Identifier is GodSon to LoongGPU.
+    
+    N/A
+    
+    Signed-off-by: wuqianhai <wuqianhai@loongson.cn>
+
+commit 49cb135a9065bf4487e1b0a43d51dcd5feca92e6
+Author: wuqianhai <wuqianhai@loongson.cn>
+Date:   Fri Nov 4 10:11:52 2022 +0800
+
+    xf86-video-loongson: add git commit show HEAD support.
+    
+    LOG:
+    [ 69233.211] (II)  Version: 0.1.0
+    [ 69233.211] (II)  Name: gsgpu
+    [ 69233.211] (II)  Date: 20200501
+    [ 69233.211] (II)  Description: GS GPU Driver
+    [ 69233.211] (II)  xf86-video-loongson git: 0c3f470dc8882cd4478899c6e19a18bb8fb47753
+    [ 69233.211] (II)  Is lsdc: no
+    [ 69233.211] (II)  Is loongson-drm: no
+    [ 69233.211] (II)  Is gsgpu: Yes
+    
+    Signed-off-by: wuqianhai <wuqianhai@loongson.cn>
+
+commit a62f99e6e78b4c8ace16eaab5a0ff7b4366ae615
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Thu Nov 3 18:16:23 2022 +0800
+
+    fix exa + fake backend crash when resizing the framebuffer
+    
+    After apply this patch
+    
+     the driver call loongson_set_pixmap_dumb_bo on exa+gsgpu
+     backend only. keep the code same with before we invent
+     loongson_set_pixmap_dumb_bo() on exa + fake backend.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 19888e9076738560507250d708cf58091aaf6032
+Author: wuqianhai <wuqianhai@loongson.cn>
+Date:   Mon Oct 31 11:11:25 2022 +0800
+
+    drmmode_crtc: Fix the windows resize cause Xserver crash.
+    
+    N/A
+    
+    Signed-off-by: wuqianhai <wuqianhai@loongson.cn>
+
+commit e10a658b6e55af109a46e352367220fdc4225ecd
+Author: wuqianhai <wuqianhai@loongson.cn>
+Date:   Sat Oct 22 12:09:40 2022 +0800
+
+    gsgpu: optimization gsgpu using feeling on UOS system
+    
+    1. using pBuf replace dumb_bo in front_fb
+    2. workaround UploadToScreen DownloadFromScreen functions
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+    Signed-off-by: wuqianhai <wuqianhai@loongson.cn>
+
+commit 968ee9ccda143288b9dc0f826aaa2064c6e5a4a3
+Author: wuqianhai <wuqianhai@loongson.cn>
+Date:   Sat Oct 22 12:08:17 2022 +0800
+
+    gsgpu: fix bugs found on gsgpu_resolve_tile4 function
+    
+    N/A
+    
+    Signed-off-by: wuqianhai <wuqianhai@loongson.cn>
+
+commit 14fca001cc88e85db46ad97929808333732b34ee
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Oct 26 17:47:46 2022 +0800
+
+    using either loongson_set_pixmap_dumb_bo() or pScreen->ModifyPixmapHeader()
+    
+    But not both. this patch fix bugs on UOS
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit ade9f8931c708e8755d5c77d953174af17b73005
+Author: Sui Jingfeng <suijingfeng@suijingfeng@loongson.cn>
+Date:   Mon Oct 17 17:40:44 2022 +0800
+
+    Only enable DRI3 layer if prime is supported
+    
+     and disable pageflip on lsdc and loongson-drm backend too
+    
+     when using gsgpu on ls7a2000 + 3a5000,  exa + gsgpu
+    
+     when using loongson-drm on ls7a2000 + 3a5000,  exa + fake
+     when using loongson-drm on ls7a1000 + 3a5000,  exa + etnaviv
+    
+     when using lsdc on ls7a2000 + 3a5000,  exa + fake
+     when using lsdc on ls7a1000 + 3a5000,  exa + etnaviv
+     when using lsdc on ls2k1000,  exa + etnaviv
+    
+    This patch fix the following error message in the /var/log/Xorg.0.log
+    
+     EXA bug: pPixmap->devPrivate.ptr was 0xaab3fc6460, but should have been NULL.
+     EXA bug: pPixmap->devPrivate.ptr was 0xaab3820000, but should have been NULL.
+     EXA bug: pPixmap->devPrivate.ptr was 0xaab40c0300, but should have been NULL.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit e8f2680fc318faf3752233625c2f0366270811cd
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Mon Oct 10 11:38:27 2022 +0800
+
+    gsgpu: fix various bugs found on UOS
+    
+     Now, our EXA acceleration works on UOS system
+     our LSX base resolve works normally. desktop is normal
+     glmark2 Score at most 375 when open compress with a not
+     so good uefi firmware
+    
+     2) improve log system, printing usefull information
+     3) rename ls_exa_set_pixmap_bo() to loongson_set_pixmap_dumb_bo()
+    
+    -    ret = ls_exa_set_pixmap_bo(pScrn, pixmap, bo, TRUE);
+    +    ret = loongson_set_pixmap_dumb_bo(pScrn, pixmap, bo, fd);
+    
+        old ls_exa_set_pixmap_bo() have problem, the fourth argument is
+        dma-buf fd shared
+    
+     4) add gsgpu bo helper function
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 59c12f53ea52cadf9338a8175e7a93ffd8d15902
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Oct 8 01:46:26 2022 +0800
+
+    present: initial add pageflip support but leave it disabled by default
+    
+     This patch also compute pitch of the gtt bo properly because the
+     front bo'stride is not equal to pixmap->devKind, we add a few printing
+     code to see the difference and explore why they are different
+    
+    (II) pixmap->devKind: 16384, fbo_patch: 15360
+    
+    improve pitch compute code as following solve abolve problem
+    
+    -    pitch = cpp * GSGPU_ALIGN(width, gsgpu_get_pitch_align(pScrn, cpp));
+    +    pitch = GSGPU_ALIGN(width * cpp, gsgpu_get_pitch_align(pScrn, cpp));
+    
+     Set the front bo as the backing bo of the screen pixmap
+     the screen pixmap is also called as root pixmap.
+     we do it for getting backing bo of the pixmap, and flip it.
+     but the backing bo compositor gave us is backing by GTT bo
+     not the root pixmap backing by dumb bo.
+    
+     Nevertheless, we are going to disable pageflip by default before
+     the kernel side have a clean and clear support toward pageflip.
+    
+     we found tons of bug at the kernel side...
+    
+     Also, per-crtc framebuffer is not implemented by x server-1.20.4
+     and pageflip tend to introduce latency on exa.
+    
+     Sync on vblank is enough for us currently, if you really want pageflip,
+     you can set "PageFlip" option to true on 20-gsgpu.conf
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit ca48529557b7959d558186ecb7e386889855bd03
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Oct 9 14:14:24 2022 +0800
+
+    code clean: change ms, ls to lsp
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit fce0edb8c4b8f5d20bed438fd84003a58a798003
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Oct 9 10:40:55 2022 +0800
+
+    gsgpu: the exa framework never let us to create a bo backing by dumb
+    
+     so we add a print to verify that is true, and investigate why
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit df820515a45a11d33e07f0655f54721447519e1d
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Oct 9 11:23:06 2022 +0800
+
+    gsgpu: the upload to screen print so much, silence it
+    
+    we should avoid printing on a product release,
+    for applications intend to running years,
+    
+    Xorg.0.log will so large, there a risk that the disk run out of usage
+    
+    This fix f962f556e79ac69ca50f5643d0eef7e2530af432
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 98d314b32663c7d8f6cd42a21405761b1185c7b3
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Oct 8 01:41:18 2022 +0800
+
+    add fake UploadToScreen and DownloadFromScreen support
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 71e6f4639f6cb4adb952cd8613eaf0e92b1b3824
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Oct 8 00:31:55 2022 +0800
+
+    don't enable dri2 support on ls7a1000
+    
+     This fix potential bugs cause by commit
+     2076db99f80e27b0898c3cb472ea0a3afa34a45c (add dri2 support for gsgpu backend)
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 5243316b309440b061eca9ffa9c7db84f75c5dac
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Oct 5 17:57:07 2022 +0800
+
+    gsgpu: fix glamor backend rage quit problem
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit f962f556e79ac69ca50f5643d0eef7e2530af432
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Oct 5 15:02:54 2022 +0800
+
+    gsgpu: implement upload to screen and download from screen
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 768955fe4f8c2f5ebf227b9a6e188f54d4c36bcc
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Oct 2 10:33:21 2022 +0800
+
+    loongson-drm, lsdc, gsgpu can create 32bpp framebuffer
+    
+     this is guaranteed, no need to ugly workaround
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 7a03ef584fa9eb550aa1d1dba0fdcb69b76712cb
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 29 20:33:35 2022 +0800
+
+    close DRI2 screen before leave
+    
+    and code cleanup and rename ms to lsp (loongson private or pointer to
+    LoongsonREC )
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 103978b5a692540d589543010433fb7aac8a2337
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 25 12:25:37 2022 +0800
+
+    gsgpu: put all of pixmap into GTT
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 2076db99f80e27b0898c3cb472ea0a3afa34a45c
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Sep 28 00:31:46 2022 +0800
+
+    add dri2 support for gsgpu backend
+    
+    After apply this patch, Xorg.0.log will show DRI2 info:
+    
+     ...
+     loongson(0): DRI2Version: major=1, minor=2
+     loongson(0): [DRI2] Setup complete
+     loongson(0): [DRI2]   DRI driver: gsgpu
+     loongson(0): [DRI2]   VDPAU driver: gsgpu
+     loongson(0): DRI2 initialized
+     ...
+    
+    To verify dri2 actually works, please run 3D app as following:
+    
+     LIBGL_DRI3_DISABLE=true glmark2
+     LIBGL_DRI3_DISABLE=true glxgears
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit a0d9fe84467693f561f0a5ae739eb8c9fbd7db93
+Author: yeyuxi <yeyuxi@loongson.cn>
+Date:   Wed Sep 28 10:37:51 2022 +0800
+
+    Add the GlxVendorLibrary option in 20-gsgpu.conf
+    
+    Add the GlxVendorLibrary option, so that xserver can return our driver name for glvnd
+    
+    Signed-off-by: yeyuxi    <yeyuxi@loongson.cn>
+    Signed-off-by: wangjinyu <wangjinyu@loongson.cn>
+
+commit e5b6c80ae834d8b2845edda001aeab710e6c232e
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 22 10:21:00 2022 +0800
+
+    avoid create GTT pixman before we have a stable release
+    
+    in which case the usage_hint of the pixmap is CREATE_PIXMAP_USAGE_BACKING_PIXMAP
+    
+    x server will create a lot of pixmap of this kind.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 0aaf7abe8a9b6ae838f772ce08927699f43f2cc0
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Sep 21 13:32:45 2022 +0800
+
+    align to 16kb page when allocating GTT BO
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 6453fbd4a695dd8f90559b1c311f0ff7ddc4ce0e
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sat Sep 17 11:31:44 2022 +0800
+
+    fix error when running make distcheck
+    
+    after apply this patch, the tar package can be
+    get by run make distcheck
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 642f2d65f9cab6fc05f529126cf94a37c8636d6d
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sat Sep 17 11:26:09 2022 +0800
+
+    allow show .rej file when using git am --reject
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 22433ee455edb89b953ed5c8524559f58926a48f
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sat Sep 17 00:37:23 2022 +0800
+
+    optimize and improve tile to linear
+    
+    thih patch handle the case when the width of can not
+    be devided by 4.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 32a068e1ff671adbb3a8ba431d61740be0e97c34
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Tue Sep 13 17:27:57 2022 +0800
+
+    gsgpu: extract buffer tiling info from the imported bo
+    
+    And do the resolve work according to the tiling information.
+    In this way, xf86-video-loognson and mesa will be decoupled.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 7a96db4b24e0d5bb92e700156457fca7b36cc4f1
+Author: wuqianhai <wuqianhai@loongson.cn>
+Date:   Thu Sep 8 16:58:05 2022 +0800
+
+    gsgpu: add gsgpu blt dri3 bo format tiled4 to linear.
+    
+    Signed-off-by: wuqianhai <wuqianhai@loongson.cn>
+
+commit 72e3c7f59f899f43d76ac5c681ab8bc0a3f99bf2
+Merge: c989d21 8f0d843
+Author: liyi <liyi@loongson.cn>
+Date:   Thu Sep 8 16:27:30 2022 +0800
+
+    Merge branch 'main' into 'main'
+    
+    using GTT as the backing memory of the shared pixmap
+    
+    See merge request loongson-gfx/xf86-video-loongson!45
+
+commit 8f0d843015685e68060a3e2e48ebf3aca2fcb42d
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Mon Sep 5 11:18:04 2022 +0800
+
+    using GTT as the backing memory of the shared pixmap
+    
+    we can put all pixmap in gtt, but the performan gain
+    is not large.
+    
+    various improve and various cleanup
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 6d1db72796b1be967e1d1f9654f1070ddf66a8af
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 4 22:24:44 2022 +0800
+
+    conf: disable debug on default
+    
+    when the debug option is open, imformation printed
+    is too much, which is only for debug purpose but not
+    for release.
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 594e08801ae2f2ff38b63ab01608b3dc54919611
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 4 12:30:27 2022 +0800
+
+    gsgpu: add support for potential firmware with different pci class
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 1270fe59ac410d5731db4c56cdcdbc0f09781a33
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 1 19:43:38 2022 +0800
+
+    exa: declare struct ms_exa_prepare_args only once
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 15381d8023030aec90bd9dffeb212be2be42855a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 1 19:29:18 2022 +0800
+
+    improve etnaviv_exa.c
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 84ef867120633c3bfa69fd3bfc883b3df81fd781
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 1 19:09:16 2022 +0800
+
+    improve LS_AllocBuf, see who is alocate non 32-bit pixmap
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 026f49524e8b30a08d4ef7ea9131868fc5a7bb79
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Aug 31 18:04:23 2022 +0800
+
+    shadowfb: fix a warning
+    
+    loongson_shadow.c: In function ‘LS_ShadowUpdate32’:
+    loongson_shadow.c:256:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+         uint32_t *shaBase = (uint32_t *) pPix->devPrivate.ptr;
+         ^~~~~~~~
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit c989d21d0b22dcf7f8e34a76793cbf5914e7ec61
+Merge: 12cec63 88acc8e
+Author: liyi <liyi@loongson.cn>
+Date:   Thu Sep 1 11:28:05 2022 +0800
+
+    Merge branch 'gsgpu' into 'modesetting'
+    
+    Initial add DRI3 + Fake exa support for gsgpu
+    
+    See merge request loongson-gfx/xf86-video-loongson!25
+
+commit 88acc8e286f3121c69a0c01d244587fcfbbeb8ac
+Merge: 4331c40 12cec63
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Aug 31 15:05:09 2022 +0800
+
+    Merge branch 'modesetting' into 'gsgpu'
+    
+    # Conflicts:
+    #   README
+    #   conf/20-loongson.conf
+    #   conf/20-lsdc.conf
+    #   conf/Makefile.am
+    #   src/loongson_module.c
+    #   src/loongson_pixmap.c
+    #   src/loongson_probe.h
+
+commit 4331c40605e35959443f2d4f00bf9caf0f347c9d
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 29 21:05:59 2022 +0800
+
+    loongson buffer: don't pass unused argument
+    
+    This patch clean up the code, but no functional change
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit d25e4cd2de5f2c135786954e6bef686d53896f1b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 29 09:11:47 2022 +0800
+
+    Avoid create pixman backing by dumb
+    
+    Because the backing memory of it is implement depandent
+    
+    we prefer cached system memory
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 154efad31af29cc55eb8df354b66e9d88e4c3d05
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 28 13:07:37 2022 +0800
+
+    prepare link libdrm_gsgpu
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 947bec785bb50b631f9972921f155e0759b442cc
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 29 09:11:47 2022 +0800
+
+    20-loongson.conf: using fake exa on loongson-drm backend
+    
+    etnaviv backend is under developing, have bugs
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit bdd7475879825dd52bad5782ed87f978bfca3471
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 28 23:08:31 2022 +0800
+
+    exa: etnaviv backend: allow using more buffer alocated from etnaviv driver
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit d7060bfc5e9875c3c6a7e53318059c1ad9e28c81
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 28 17:14:49 2022 +0800
+
+    improve log
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 8d9a8828bc85e9112537648bceceb153c94a977e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 28 17:14:06 2022 +0800
+
+    using CREATE_PIXMAP_USAGE_SHARED instead CREATE_PIXMAP_USAGE_BACKING_PIXMAP
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 1c18bc6a78d5f7902d1241f0af9bfccfa5162f18
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 28 17:13:10 2022 +0800
+
+    fake exa: dri3: complain if get_bo_from_fd
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 600005e631b5360992ae8ab15ce940ec5f414388
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 26 18:00:01 2022 +0800
+
+    gsgpu: exa: code cleanup
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 6b3d3abccc507ada3b1507ae4702c0efa9ad1948
+Author: gfx-ci <gfx-ci@loongson.cn>
+Date:   Fri Aug 26 17:23:21 2022 +0800
+
+    gsgpu: tune the backing memory of the pixmap to userpace malloc buffer
+    
+    This made the 2d graphic experience fast and comfortable.
+    
+    because the backing memory of pixmap imported by
+    ms_exa_pixmap_from_fds() is located at VRAM.
+    
+    Pixman will be the bottleneck when composite pixmap backed by VRAM
+    
+    Signed-off-by: Sui Jingfeng <suijingfeng@loongson.cn>
+
+commit 7bfb67ce58b935fb879adf50ee2cb542c0a47392
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 26 16:26:50 2022 +0800
+
+    add fake exa implement for gsgpu backend
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit fabd61e374b1fce5a1dc218427ca4552e7f23e10
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 26 14:58:46 2022 +0800
+
+    fake exa: code clean
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 2e06126f48e66e3200dcff02e3b3b2a5987cac26
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 26 14:24:06 2022 +0800
+
+    improve etnaviv backend
+    
+    This improve commit of c564244779c294447912ea084ad54ada7f2ee7e2
+    which try to make DRI3 implement correct.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 80d3cadc600d8afafcb4ab09737a888626b43ce0
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 26 10:28:37 2022 +0800
+
+    add gsgpu backend
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 12cec63a61a725a827c44c7ce6fa76db0beb9f32
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jan 25 22:50:43 2022 +0800
+
+    conf: don't enable double shadow on default
+    
+    As net bandwidth is not bottleneck on native desktop environment.
+    enable double shadow introduce extra overhead which killing the
+    performance.
+    
+    overhead is mostly introduced by LS_DoubleShadowUpdate() and
+    LS_UpdateIntersect(), let us shut it down now.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 1f8bc9239454bb0e18a90cb503fdfd4d4f39ae13
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Jan 21 20:03:43 2022 +0800
+
+    add support for dc in ls7a2000
+    
+    Change-Id: Ifcecf90b0d2c45a9d7c2df9b3d6f11d19b674cba
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 006ef4e1456112f03751ab7fca373593fedf1d83
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 19 16:55:39 2021 +0800
+
+    remove unnessary exporting dmabuf fd when create a pixmap backed by a dumb buffer
+    
+    This seems cause resource leak, cause the system hung when
+    using the system in a very long time on debian system.
+    
+    signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 314a35df77002060fc2628d8c6b3cf363403306b
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Mon Nov 22 14:40:48 2021 +0800
+
+    update dependency
+
+commit 71b5369950ce96b2c99d4438bee9fcec9b29a9b3
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Oct 28 00:01:47 2021 +0800
+
+    document pixmap
+
+commit 2bc789afc9ddca96513ba424d639bd80ce3aced8
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Oct 22 22:03:23 2021 +0800
+
+    debug vblank and code cleanup
+    
+      seperate sprite(cursor) related stuff from drmmode_display.c
+
+commit 8473c203bd138579efdf671813937c32b3e0dec9
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 23 19:58:51 2021 +0800
+
+    non 64 pixels divide resolution support
+
+commit d67f0cd59c4a05ef08af4e3947a5f263552b66a2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 23 00:19:34 2021 +0800
+
+    don't link libgbm.so in
+    
+    it is necessary now.
+    
+    when libgbm.so's elf abi is not compatible with current operate system
+    this driver broken.
+    
+    we love gbm and glamor, but we want this drvier keep a minimal requirement
+    about the system lib environment.
+    
+    we will reenable glamor and gbm support untill we find a driver work with
+    this driver.
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit e7e15f91a598edbfee6fbc46b88c86f858b761eb
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 23 00:01:06 2021 +0800
+
+    fix build issue with ./configure --disable-glamor
+    
+    driver.c: In function ‘msSharePixmapBacking’:
+    driver.c:1023:43: error: ‘struct _modesettingRec’ has no member named ‘glamor’
+         struct GlamorAPI * const pGlamor = &ms->glamor;
+                                               ^~
+    driver.c:1023:30: warning: unused variable ‘pGlamor’ [-Wunused-variable]
+         struct GlamorAPI * const pGlamor = &ms->glamor;
+                                  ^~~~~~~
+
+commit a3aeaaec9d33c999bd757502126b54fd3ba49895
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Sep 15 02:40:46 2021 +0800
+
+    trival cleanup
+
+commit 08a6b7f96e5ced4ce6d6dc3630874c66942b36ab
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Sep 14 00:56:07 2021 +0800
+
+    print more information
+
+commit 2f9b8c9ba3d46be1cf1e49f199665d6f72f685f8
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Sep 14 00:45:32 2021 +0800
+
+    double shadow buffer is not prefered on ls7a1000
+
+commit 25e9209d88cec70a03b677fdc2c7f8b5300d647b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Sep 14 00:27:26 2021 +0800
+
+    absorbe drmmode_create_dumb_bo()
+
+commit d675ddcf678cffa4e89bcc5ebd0c4b384a8ba4c3
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Sep 13 18:30:34 2021 +0800
+
+    conf: don't enable shadow
+
+commit 9afeda81f503195e1f649e307726a2747e981961
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Aug 26 20:59:59 2021 +0800
+
+    conf: don't enable double shadow on default
+    
+    As net bandwidth is not bottleneck on native desktop environment.
+    enable double shadow introduce extra overhead which killing the
+    performance.
+    
+    overhead is mostly introduced by LS_DoubleShadowUpdate() and LS_UpdateIntersect()
+    
+    let us shut it down now!
+
+commit 1d4c1cf54ca427fa41c57efe1d8c98d27ced1952
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Aug 26 21:06:52 2021 +0800
+
+    cache &ms->drmmode to a local variable
+    
+    as it is used frequently.
+
+commit f454dc1ec0eda7679e18692d07e1adf5de012d13
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Aug 26 12:15:48 2021 +0800
+
+    Try to split glamor layer with exa layer as much as possible
+    
+    Try to figure out front BO is not need be mapped when glamor is enabled
+
+commit c3210f807c84f9bb96069a1eb4d57a02196f93e5
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Aug 25 01:43:18 2021 +0800
+
+    make probe kernal modesetting driver name a single function
+    
+     1) code align and refactor
+     2) scrn -> pScrn
+     3) strip double shadow update code
+
+commit 4915498139a36230efc283d7cbaa9eea6e17784d
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Aug 24 10:39:32 2021 +0800
+
+    remove temporary developing code
+
+commit 78b545d6d438c3e0caabcdebe8d581f58ede8e94
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Aug 24 00:12:58 2021 +0800
+
+    check if /dev/galcore is exist
+
+commit 45af910995cac5923821ce5aa61170c9c4d5f68f
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 23 23:06:35 2021 +0800
+
+    made it easier to tell lsdc and loongson-drm kms apart
+
+commit ad55acc95044327e8bf02a9fc6cdc560ff59bc3e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 23 15:07:34 2021 +0800
+
+    make the log printed easy to read
+
+commit f08ba0a35e6ba9f848971fc5d9c599b83d769139
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 23 14:29:02 2021 +0800
+
+    pass pScrn into callee
+    
+    add a helper function to detect PRIME support
+
+commit 1843c479681ed6027f9301cbf3e0b99f030d3ec2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 20 22:01:42 2021 +0800
+
+    fix a warnning
+    
+    loongson_glamor.c: 在函数‘drmmode_create_gbm_bo’中:
+    loongson_glamor.c:274:5: 警告：ISO C90 不允许混合使用声明和代码 [-Wdeclaration-after-statement]
+         uint32_t num_modifiers;
+         ^~~~~~~~
+
+commit 8e682260e9797c37fdc74929db543887816a6b8b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 20 18:44:52 2021 +0800
+
+    fix bug commit 2450823f425c5d889351b3c0e28848eaf3304ee7 introduce
+    
+    which resolve a undefined function symbols (LS_GetPassedFD())
+    
+    LS_GetPassedFD is removed by commit 2450823f425c5d889351b3c0e28848eaf3304ee7
+
+commit 9ca2ab8e8b7df130377c5559350ca957a0f3d400
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 20 17:33:07 2021 +0800
+
+    code format and cleanup
+
+commit b5e4f648dc4fdd0865e272b3403552cb11d95e59
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 20 16:16:46 2021 +0800
+
+    Optimize msUpdateIntersect
+    
+      1) save a local veriable, this leave more register to the compiler to allocate.
+    
+      2) rename variable more clearly
+    
+         use line_width donate how much bytes a line of pixels have,
+         "a line" means a line of window.
+    
+      3) use const when ever possible
+    
+      4) don't compare unsigned int with int, compare unsigned int with unsigned int
+
+commit a1dc8001b2d2df3c4166733ec3be3ab4cc1e835c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Aug 19 11:22:50 2021 +0800
+
+    remove a space
+
+commit 3dac97e3dadbcb199adfa0693d53cda846bf0544
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Aug 18 20:23:38 2021 +0800
+
+    print when cursor bo is mapped
+    
+    NOTE: it's only mapped when it is a hardware cursor
+    
+    trival cleanup
+
+commit f39f78fb13ec04bca108ded9380337f2efaf7d9e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Aug 18 10:30:54 2021 +0800
+
+    remove reverse prime support
+
+commit 59727c2689967f69eb5940d1fb28c0f6b2956f21
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Aug 12 09:24:56 2021 +0800
+
+    fake_exa: code cleanup
+
+commit 111f4834266868650751c266b037c270a4237c82
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Aug 12 09:24:07 2021 +0800
+
+    xf86-video-loongson version is 0.2 now
+
+commit 2450823f425c5d889351b3c0e28848eaf3304ee7
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Aug 11 17:39:37 2021 +0800
+
+    remove a function which reference enternal symbol
+    
+    xf86DRMMasterFd is introduced by bc1882aa23a129c4b72b0bfc132cfd04db801a90
+    
+    this is ussed to save the command line argument for DRM master file descriptor
+    
+    this is not use on our application.
+
+commit 7950339067b4fcea70dfba8157ba82bbb77e52f9
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Jul 14 16:08:37 2021 +0800
+
+    glamor related code cleanup and pass make distcheck
+
+commit 8a24853ab31623889f542599c1bf65178c9029a2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Dec 22 23:27:20 2020 +0800
+
+    improve loading shadow api
+
+commit 1fd0f6eba025391e4235ef2da9e7ecb6461c6c9b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Apr 12 10:17:53 2021 +0800
+
+    remove unnessary exporting dmabuf fd when creating a dumb buffer
+
+commit b26824e2df381e726c4211936d7f071332d255a2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Apr 10 15:41:10 2021 +0800
+
+    free resource when get fd from handle failed
+
+commit 3d2fc9e298b5fe9f71826125e2a70ba7329fcf8c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Mar 23 11:56:01 2021 +0800
+
+    Makefile: prepare drm name change
+
+commit 0b4d9b8d4fcf0aa7d9b4d9d398850fa80426bb57
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Mar 23 11:41:45 2021 +0800
+
+    conf: remove redundant options
+
+commit 6874c50fcb3c84d4ad86eeaeea40f05d3cfaa02e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Mar 23 11:33:54 2021 +0800
+
+    conf: prepare drm name change
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 43fdc066f9e83ad2c67a2f5e46d8c4a7c23220b9
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Mar 23 09:54:26 2021 +0800
+
+    exa: code clean
+
+commit c2b13c0b33be12b3f1676b4fbe8070673adc22d5
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Mar 21 22:51:33 2021 +0800
+
+    readme: update dependency: xutils-dev
+    
+    otherwise can not build
+    
+    $ ./autogen.sh
+    autoreconf: Entering directory `.'
+    autoreconf: configure.ac: not using Gettext
+    autoreconf: running: aclocal -I m4
+    configure.ac:41: error: must install xorg-macros 1.8 or later before running autoconf/autogen
+    configure.ac:41: the top level
+    autom4te: /usr/bin/m4 failed with exit status: 1
+    aclocal: error: echo failed with exit status: 1
+    autoreconf: aclocal failed with exit status: 1
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 42b574b3039836400b558a65dcfe67bdb695245d
+Merge: 089a9be 8ed40ad
+Author: liyi <liyi@loongson.cn>
+Date:   Sat Dec 5 11:08:21 2020 +0800
+
+    Merge branch 'doc' into 'modesetting'
+    
+    Doc
+    
+    See merge request loongson-gfx/xf86-video-loongson!24
+
+commit 8ed40adfdff805b8bdb406b7380a277f72cae358
+Author: zhaojiale <zhaojiale@loongson.cn>
+Date:   Sat Dec 5 10:56:28 2020 +0800
+
+    doc: modify configure.ac
+    
+    change the version 0.1.0 into 0.2.0
+    
+    Signed-off-by: zhaojiale <zhaojiale@loongson.cn>
+
+commit 8c0c062c2665ea6a86938cc7d26a8955f4b36365
+Author: zhaojiale <zhaojiale@loongson.cn>
+Date:   Sat Dec 5 10:53:41 2020 +0800
+
+    doc: change the loongson.man
+    
+    Signed-off-by: zhaojiale <zhaojiale@loongson.cn>
+
+commit 118cb0fda3cd66d1be13555ab6ba85e847ee1bad
+Author: zhaojiale <zhaojiale@loongson.cn>
+Date:   Sat Dec 5 10:50:29 2020 +0800
+
+    doc: add two dependencies to the README
+    
+    dependencies:libtool libsysfs-dev
+    
+    Signed-off-by: zhaojiale <zhaojiale@loongson.cn>
+
+commit 2afa28d44a9a7be664a5c4d033894b3e3da79cda
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Sun Nov 1 19:40:18 2020 +0800
+
+    dri3: code clean
+
+commit 3967175473722eb7384e02f9f129cbdc29ecdf28
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Oct 2 11:23:35 2020 -0400
+
+    introduce drmmode_output.c
+
+commit 2a8af89560be59cf54b955c8ef82f42059111b4c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 27 03:17:55 2020 -0400
+
+    fix potential bus when enable GLAMOR_HAS_GBM macro
+
+commit 3c2b3822b30f6c844f25d091f4a3fb04d2d26f93
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 10 10:23:18 2020 -0400
+
+    code clean
+    
+    Refactor free bos function
+    
+    SegFault when enable GLAMOR_HAS_GBM, it is caused by
+    the following two hooks, comments this to solve this
+    problem, debug it at a latter time.
+    
+        .flip = ms_present_flip,
+        .unflip = ms_present_unflip,
+
+commit ad10ec171d7a8b9a73517e33bb08c9324f40bc62
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 10 08:11:41 2020 -0400
+
+    initial support glamor
+
+commit 6890a803766977ee91ef5b6dd041bd54ac2bf942
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Sep 7 04:22:04 2020 -0400
+
+    prepare debuging prime: output slave support
+
+commit 089a9be4e3c91eaeb344f4bcd52dad79122ee04f
+Merge: b81995c 7dc7324
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Sep 7 12:05:05 2020 +0800
+
+    Merge branch 'README_change' into 'modesetting'
+    
+    README_change: add a dependency (xorg-dev)
+    
+    See merge request loongson-gfx/xf86-video-loongson!20
+
+commit 80e3fa39f7b2a129d8f7322f71c7d539dbd5a6e5
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 6 23:01:34 2020 -0400
+
+    xf86-video-loongson can support ast2400 and loongson 7a1000
+
+commit 134a469437b4f25a1951b839bf84935eef66aac4
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 6 22:12:24 2020 -0400
+
+    rewrite shadow alloc function
+
+commit e3420974c8ce8260dda8848fd52bfa6081406e6d
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 6 10:44:55 2020 -0400
+
+    prepare add support to AST2400
+
+commit def3899f87881e27280cf8acc5d56bd0a4f62f63
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 6 06:17:04 2020 -0400
+
+    refactor: split gbm with dumb
+
+commit 09978f6fa9fda49226da4f659774375a051e2f5c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Sep 6 02:10:54 2020 -0400
+
+    rewrite drmmode_create_initial_bos()
+
+commit 54bc4b109d6fe464331f5de7a4182a8b4f124958
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 3 21:23:08 2020 -0400
+
+    prime: debug SinkOffload and SinkOutput
+
+commit 5e444e96ca8b75f5568ca9979c5e21675584b5f0
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Sep 3 11:10:14 2020 -0400
+
+    driver: format cleanup and improve
+
+commit 7dc732465a82367c73a266433327504c71397c7a
+Author: zhaojiale <zhaojiale@loongson.cn>
+Date:   Thu Sep 3 09:14:02 2020 +0800
+
+    README_change: add a dependency (xorg-dev)
+    
+    why to do: if you ssh a remote computer,you shoud install this dependency,because this metapackage provides the development libraries for the X.Org X Window System. X Window System design documentation, manual pages, library reference works,static versions of the shared libraries, and C header files are supplied by the packages depended on by this metapackage.
+    
+    Signed-off-by: zhaojiale <zhaojiale@loongson.cn>
+
+commit b81995ce7bd07b7e6445d062bcc7e87ad579270c
+Merge: 82218cb 40c9c9a
+Author: zhaojiale <zhaojiale@loongson.cn>
+Date:   Mon Aug 31 09:13:27 2020 +0800
+
+    Merge branch 'README_exchange1' into 'modesetting'
+    
+    README_exchange1: change the README --remove autotool depdenency on UOS
+    
+    See merge request loongson-gfx/xf86-video-loongson!19
+
+commit 40c9c9acad5f9164e28e442f54d72181c3cea352
+Author: loongson <loongson@loongson-PC>
+Date:   Sat Aug 29 04:38:31 2020 -0400
+
+    README_exchange1: change the README --remove autotool depdenency on UOS
+    
+    why to do:not have this dependency,so we should delete it.
+    
+    Signed-off-by: loongson <loongson@loongson-PC>
+
+commit 82218cb7847c9129f5ce71a20d3e23cda04f587c
+Merge: 111e153 6491691
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Aug 28 10:30:40 2020 +0800
+
+    Merge branch 'README_exchange' into 'modesetting'
+    
+    xf86-video-loongson: change README
+    
+    See merge request loongson-gfx/xf86-video-loongson!18
+
+commit 111e1536ebc22178211cc66602ca1f67303ee060
+Merge: d5bdf6a fe19aa1
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 16 19:09:26 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    Modesetting
+    
+    See merge request loongson-gfx/xf86-video-loongson!17
+
+commit fe19aa1fc3e21c925f337bbeb79d3a3a4bc26108
+Merge: c2db014 d5bdf6a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 16 19:08:43 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    # Conflicts:
+    #   src/dri3.c
+
+commit 64916916735b1fd49ceb9f47b27d509b790e4259
+Author: zhaojiale <zhaojiale@loongson.cn>
+Date:   Fri Aug 14 18:04:01 2020 +0800
+
+    xf86-video-loongson: change README
+    
+    Why to do it:missing the dependency of "xutils-dev libgbm-dev"  at "on UOS" in README.
+    
+    Signed-off-by: zhaojiale <zhaojiale@loongson.cn>
+
+commit c2db014e9ee03c78804dc367d37bae01988db56e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 10 21:35:10 2020 +0800
+
+    udev event
+
+commit 764dbc0de99d5eb259f6c97193ae204bd62e91b6
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Aug 10 17:17:31 2020 +0800
+
+    Enable present extension
+    
+    and remove ENABLE_FAKE_EXA, this MACRO is only documention purpose
+
+commit 7d48c240337c778bf2e00045d0551a0530c402ab
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Jul 31 16:02:12 2020 +0800
+
+    code clean: remove redundant checks in ms_exa_pixmap_from_fds()
+    
+        if (NullPixmap == pixmap)
+        {
+            TRACE_EXIT();
+            return NULL;
+        }
+    
+    and remove tailing space
+
+commit 89eeedbcea130a565bdbfb9003c18805c76e7878
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 2 18:01:13 2020 +0800
+
+    Fallback to shadow if prime is not support
+    
+    If the user use EXA + DRI3 acceleration framework with a TTM-base KMS,
+    the performance is not good due to lack of hardware acceleration,
+    hence we fallback to shadow in this case.
+    
+    And a warning will be printed to the Xorg.0.log.
+    
+    (WW) loongson(0): DRM PRIME is NOT supported, will fallback to shadow.
+    
+    Maybe it is necessary to get 2D vivante exa driver to work,
+    but it is a mess.
+
+commit e1275f35f168de68a0b7f1b2292f7c931373df77
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Aug 2 17:57:43 2020 +0800
+
+    Don't print unnecessary log about DRI3 when release
+    
+    The log as follows is only usefull when debug, it shouldn't be printed in the
+    release product.
+    
+    (II) loongson(0): DRI3: PixmapFromFD: pixmap:0xaab5729130 300x300 24/32 1280->1280
+    (II) loongson(0): DRI3: PixmapFromFD: pixmap:0xaab5729130 300x300 24/32 1280->1280
+    
+    ...
+    
+    (II) loongson(0): DRI3: PixmapFromFD: pixmap:0xaab5729130 300x300 24/32 1280->1280
+    
+    (II) loongson(0): /dev/dri/card0 opened in 57.
+    (II) loongson(0): /dev/dri/card0 opened in 57.
+    (II) loongson(0): /dev/dri/card0 opened in 58.
+    (II) loongson(0): /dev/dri/card0 opened in 64.
+    (II) loongson(0): /dev/dri/card0 opened in 65.
+
+commit 2b1204b2ab7186f158604c694e74e2ffdfc1bbe8
+Author: suijingfeng <suijingfeng@loognson.cn>
+Date:   Wed Jul 8 08:19:50 2020 -0400
+
+    Don't include sys/ioctl.h if we are not call drmIoctl()
+    
+     - dumb_bo: code format clean up
+     - pass DRM_CLOEXEC paramenter to drmPrimeHandleToFD()
+
+commit 20bd2c6e33d04a733b4ed966c3ac0b2de1b262a6
+Author: suijingfeng <suijingfeng@loognson.cn>
+Date:   Wed Jul 8 05:39:16 2020 -0400
+
+    replace dumb_bo_get_fd() with drmPrimeHandleToFD()
+    
+    drmPrimeHandleToFD() is provided with libdrm,
+    we don't want reinvent the wheel.
+
+commit 83be061e036c175711491838bb6c7bc78ca7fbd0
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Jul 8 00:05:59 2020 +0800
+
+    add more description about the code
+
+commit d5bdf6a7efc78cd899f8303e5f38db55d2aba91b
+Merge: 85fad9b 6210442
+Author: liyi <liyi@loongson.cn>
+Date:   Thu Jul 23 16:00:58 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    Fallback to shadow if prime is not support
+    
+    See merge request loongson-gfx/xf86-video-loongson!16
+
+commit 621044295a16a4528c8d209e4db471cad50834bf
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Jul 23 12:14:19 2020 +0800
+
+    Fallback to shadow if prime is not support
+    
+    If the user use EXA + DRI3 acceleration framework with a TTM-base KMS,
+    the performance is not good due to lack of hardware acceleration,
+    hence we fallback to shadow in this case.
+    
+    And a warning will be printed to the Xorg.0.log.
+    
+    (WW) loongson(0): DRM PRIME is NOT supported, will fallback to shadow.
+    
+    Maybe it is necessary to get 2D vivante exa driver to work,
+    but it is a mess.
+
+commit 420709a94af8cc435563ec7f6090d4f33ceae78b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Jul 10 10:08:58 2020 +0800
+
+    fix warnnings
+
+commit d9bbba15d6cb1824259febc22d8fd88d3a3a32b2
+Author: suijingfeng <suijingfeng@loognson.cn>
+Date:   Thu Jul 9 02:55:29 2020 -0400
+
+    Don't print unnecessary log about DRI3 when release
+    
+    The log as follows is only usefull when debug, it shouldn't be printed in the
+    release product.
+    
+    (II) loongson(0): DRI3: PixmapFromFD: pixmap:0xaab5729130 300x300 24/32 1280->1280
+    (II) loongson(0): DRI3: PixmapFromFD: pixmap:0xaab5729130 300x300 24/32 1280->1280
+    
+    ...
+    
+    (II) loongson(0): DRI3: PixmapFromFD: pixmap:0xaab5729130 300x300 24/32 1280->1280
+    
+    (II) loongson(0): /dev/dri/card0 opened in 57.
+    (II) loongson(0): /dev/dri/card0 opened in 57.
+    (II) loongson(0): /dev/dri/card0 opened in 58.
+    (II) loongson(0): /dev/dri/card0 opened in 64.
+    (II) loongson(0): /dev/dri/card0 opened in 65.
+
+commit 04d95184ef28fb6b54a2ef1dd00a304d86e733a5
+Author: suijingfeng <suijingfeng@loognson.cn>
+Date:   Wed Jul 8 23:45:24 2020 -0400
+
+    code clean and delete unnecessary comment
+
+commit e728971d084fe9a0100940ec19939c3a35c25e88
+Author: suijingfeng <suijingfeng@loognson.cn>
+Date:   Wed Jul 8 22:51:20 2020 -0400
+
+    code clean
+
+commit fbb953ebb452811425cad1aafcbc67a380b0152d
+Author: suijingfeng <suijingfeng@loognson.cn>
+Date:   Wed Jul 8 08:19:50 2020 -0400
+
+    Don't include sys/ioctl.h if we are not call drmIoctl()
+    
+     - dumb_bo: code format clean up
+     - pass DRM_CLOEXEC paramenter to drmPrimeHandleToFD()
+
+commit 85fad9b51aff15cddba25354e93606b462759460
+Merge: 9984191 3e59d27
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Jul 8 19:46:15 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    make different exa acceleration implement configurable
+    
+    See merge request loongson-gfx/xf86-video-loongson!14
+
+commit 3e59d271fb9cb89aabe764f215fdf62f5a0fa407
+Author: suijingfeng <suijingfeng@loognson.cn>
+Date:   Wed Jul 8 05:39:16 2020 -0400
+
+    replace dumb_bo_get_fd() with drmPrimeHandleToFD()
+    
+    drmPrimeHandleToFD() is provided with libdrm,
+    we don't want reinvent the wheel.
+
+commit 2b3b88c6aca2610d2fec31d875c2e476ba5359b7
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Jul 8 00:05:59 2020 +0800
+
+    add more description about the code
+
+commit 6c22627af7790ddaf44ff65bac7ecefda84f2e10
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jul 7 12:26:10 2020 +0800
+
+    declare the static function at the top of src file
+
+commit 60aeb7f1a52605bf177ef0bcca67114f2bc27bb4
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jul 7 12:24:22 2020 +0800
+
+    made drmmode_create_pixmap_header() static
+
+commit 21499fea1244a6bd5bd1bf59ae601f0e43a12230
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Jul 6 23:00:10 2020 +0800
+
+    improve LS_IsDumbPixmap() and remove tailing space
+
+commit 0c73c30b534f1369714e8d778fa879ecd58e9a22
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Jul 6 22:43:14 2020 +0800
+
+    remove tailing space
+
+commit 729de5dc849e5eb62028f2a9239433611ad1a5c3
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Jul 6 14:28:17 2020 +0800
+
+    make different exa acceleration implement configurable
+
+commit 607c2475417fb9aceb356296382a96e48d7df4d3
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Jul 4 23:34:27 2020 +0800
+
+    code style adjustment
+
+commit 7ac6690d912b817ed422f032c3304f1945540a89
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Jul 4 09:06:17 2020 +0800
+
+    don't enable debug on the release
+
+commit daf166afd0096a3c40a5e5b599f3dfd8c0872627
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Jul 2 21:20:16 2020 +0800
+
+    move glamor related stuff to loongson_glamor.c
+
+commit 86ce23e2fee471c0bf00cb1653b62e798daa9557
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Jul 2 20:26:06 2020 +0800
+
+    dont include XV related headers, we are not implement xv now
+
+commit f39b347f670950139b6028209b2446f37d46ea53
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Wed Jul 1 23:46:02 2020 +0800
+
+    code clean
+
+commit 99841915157da3d081f8a72c45afccd114ffb9b1
+Merge: 08df70d 2ea8cd0
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Jul 1 00:36:33 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    Implement fake exa + dri3 acceleration framework on the top of modesetting
+    
+    See merge request loongson-gfx/xf86-video-loongson!13
+
+commit 2ea8cd07a44dad7a4f63d06d2611ee96aeaf2047
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Jul 1 00:22:16 2020 +0800
+
+    Add ordinary backing buffer support to ms_exa_pixmap_priv
+    
+    CREATE_PIXMAP_USAGE_GLYPH_PICTURE shouldn't be backing with DUMB
+
+commit 8dad7f67a6e9898430a50bf50427a0c4d8ebd554
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Jun 29 12:15:01 2020 +0800
+
+    add a function to a judgement if a pixmap is dumb backed
+
+commit 8cc7d1ea32a16e7f1b8d513c9fc72afb14a3a4f7
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Jun 28 23:31:01 2020 +0800
+
+    refactor and modularity
+
+commit 73ed9c915130641a20ac7f6d29a3f9769a7f3fda
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Jun 28 17:36:40 2020 +0800
+
+    initial integrate exa accelaration framework into modesetting
+
+commit 8365cb32bc837b60ccb309ace36054e72b45364f
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 23 11:26:04 2020 +0800
+
+    add option ralated code to let user made the choose use exa or not
+
+commit 23cf1cad803ca7cf61f9d86162a8acd0cd0b4339
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Jun 21 11:31:20 2020 +0800
+
+    using software cursor
+
+commit ca52d4469aaccdbac9d9badf0b25c35bbce81720
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Jun 8 15:19:45 2020 +0800
+
+    print more information in drmmode_crtc_init
+
+commit c8895c36c2af53fa983b8982ed41c7faab4d7f2c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 2 14:59:24 2020 +0800
+
+    Update readme
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 08df70d69ea12c6266ba3013959ebba8123f6f41
+Merge: 11749f9 b6f0384
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 2 15:04:38 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    Update readme
+    
+    See merge request loongson-gfx/xf86-video-loongson!12
+
+commit b6f03845b5e47df74117f407fb1b2d0ebdfb9b87
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 2 14:59:24 2020 +0800
+
+    Update readme
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit 11749f984d13a5a6e492170bd27ce7573d8c3208
+Merge: 283a5d0 5086021
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 2 14:55:24 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    update readme: documention dependency
+    
+    See merge request loongson-gfx/xf86-video-loongson!11
+
+commit 508602149859b4251bd3f01d46d720b7a288f23b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 2 14:48:06 2020 +0800
+
+    update readme: docment dependency
+
+commit 283a5d0a67109b82541ef82c8dcd4c3504c8b17e
+Merge: cf66889 2dbc49d
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 2 14:40:29 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    merge my commits in recent times
+    
+    See merge request loongson-gfx/xf86-video-loongson!10
+
+commit 2dbc49da8158ade936d2aa05d5930475f302892a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Jun 2 11:59:26 2020 +0800
+
+    code align: replace tabs with space
+
+commit dd2b68c40c89af549118a7ca621c3c52a5ac1210
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun May 31 02:20:45 2020 +0800
+
+    update configure.ac: want more warnning information
+
+commit db6fadf4251ef6c78f65b1e77748d0dc8a8dc4c6
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun May 31 00:53:24 2020 +0800
+
+    Check dri3.h, present.h, and misyncshm.h as amdgpu does
+    
+    and improve CFLAGS, but it seems does not have any influence
+    
+    remove $CXXFLAGS, as this pure C project
+
+commit cd63439a12c184f2bf82935c81970a8caa6d572e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 23:11:31 2020 +0800
+
+    Checking libdrm and libudev as AMDGPU does
+    
+    this help us to remove ugly code in configure.ac
+    for example:
+    
+        SAVE_LIBS=$LIBS
+        LIBS=$DRM_LIBS
+        LIBS=$SAVE_LIBS
+    
+    we may need to check libdrm_etnaviv in the near feature
+    
+    add check videoproto
+
+commit 2e7a7e8d04cc665e814141f8c81d5f9166f68e74
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 22:36:58 2020 +0800
+
+    Update configure.ac: document about AC_OUTPUT
+    
+    AC_OUTPUT ([ file ]. . . , [ extra-cmds ], [ init-cmds ])
+    
+    The use of AC_OUTPUT with arguments is deprecated. This obsoleted interface is equivalent to:
+    
+    AC_CONFIG_FILES(file ...)
+    AC_CONFIG_COMMANDS([default],
+    extra-cmds, init-cmds )
+    AC_OUTPUT
+
+commit d9f459445d78fd3d744494e59a85cb8ccdf18177
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 22:32:34 2020 +0800
+
+    Update configure.ac: using dnl to output prefix, libdir, configdir and CFLAGS related information
+    
+    If you have some special comments about pure M4 code, comments that make no sense in
+    ‘configure’ and in the header comment, then use the builtin dnl: it causes M4 to discard
+    the text through the next newline.
+    
+    Keep in mind that dnl is rarely needed to introduce comments; dnl is more useful to
+    get rid of the newlines following macros that produce no output, such as AC_REQUIRE.
+
+commit ea41134edd36a067523d70d58e7a01412df0b059
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 21:40:32 2020 +0800
+
+    Add a function to setting default virtual related job, PreInit is overweight
+
+commit cf391ca871a86476250f32f311af1552f008d3bb
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 21:37:04 2020 +0800
+
+    require hw io is actually x86 specific, mips seems not need it
+
+commit d95a5e54efed6058bd6050f98087c27c78336d87
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 21:35:20 2020 +0800
+
+    code clean: include config.h as others .c does
+
+commit 2ee037e45582fe5ae439cb5802939b53fb715947
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 21:33:56 2020 +0800
+
+    code clean: localize a Bool variable
+
+commit 6bfacd37fc8e5d1062e06b91bc6548530d31b4c4
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 21:32:26 2020 +0800
+
+    Update copywrite
+
+commit 46f6aa165bfbb39feca7209cb8754173d4d23b0a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 30 21:30:07 2020 +0800
+
+    Checking if sys/ioctl.h and stdint.h is available
+    
+    Macro: AC_CHECK_HEADERS (header-file..., [action-if-found],
+                                             [action-if-not-found],
+                                             [includes = `default-includes'])
+    
+    For each given system header file header-file in the blank-separated argument list that exists,
+    define HAVE_header-file (in all capitals).
+    
+    If action-if-found is given, it is additional shell code to execute when one of the header files
+    is found. You can give it a value of `break' to break out of the loop on the first match.
+    
+    If action-if-not-found is given, it is executed when one of the header files is not found.
+
+commit 2659cacd06ca16d03243322a20ce6ac2ff1971c2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 27 16:00:52 2020 +0800
+
+    static function should drop prefix
+
+commit 54c45064eaef5b55f192896439cf82f90f54a02f
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 23 17:54:50 2020 +0800
+
+    remove SaveGeneration in struct _modesettingRec
+
+commit 1cb6e033ed2afa295686c241359003fb4c7648b5
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 20 22:15:40 2020 +0800
+
+    PreInit: localize the local variale
+    
+    defaultdepth, defaultbpp and bppflags are not used on other place.
+
+commit a7df477015a3ff77c86109bbaf8ef5712722d966
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 20 22:13:51 2020 +0800
+
+    initialize I_LoongsonDrv: more clear about the meaning of each member of DriverRec
+
+commit cf66889ec22cd5cf61e473ee7bba1ebfc35fb3c4
+Merge: e5ec2f5 e2acc86
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue May 19 20:23:35 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    Modesetting
+    
+    See merge request loongson-gfx/xf86-video-loongson!3
+
+commit e2acc86908b42cbd466b7e28eb4fe92f9dd652cb
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue May 19 19:21:32 2020 +0800
+
+    catched local variable can be use
+
+commit 56777202c8f0d64a502605f9305040066f052006
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 16 21:56:43 2020 +0800
+
+    improve platform probe
+    
+     - remove duplicate print
+     - tabs and space clean up
+     - improve probe_hw function, reduce one argument needed to pass
+       and path is actuall used when failed get the fd from the server.
+       and it is LS_OpenHW actually need it. doing this make the code
+       more clear.
+
+commit c17ca95c1f23c81364c4ec0918b398a517346800
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat May 16 14:13:11 2020 +0800
+
+    conf: remove tailing space
+
+commit 4b34c0b7399770c8ac6efd616b160dc39f3f1919
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri May 15 11:47:41 2020 +0800
+
+    trival code clean
+
+commit e5ec2f57da93f6921399179c24a1b65ab87988cd
+Merge: 09a3f4f 397694a
+Author: liyi <liyi@loongson.cn>
+Date:   Wed May 13 17:00:23 2020 +0800
+
+    Merge branch 'modesetting' into 'modesetting'
+    
+    update readme
+    
+    See merge request loongson-gfx/xf86-video-loongson!2
+
+commit 397694a2f7f99a33d530ae2b6aa0e59474c24a56
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 13 16:21:36 2020 +0800
+
+    update readme
+
+commit 09a3f4f646eb30c1c317bc2c6cfeae0fdf2c8d3c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 13 14:46:29 2020 +0800
+
+    document the code: about output slave support
+
+commit 539471040dbb052a30cf1967f93eadad2f44d2b4
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue May 12 22:21:27 2020 +0800
+
+    all entity related stuff go to loongson_entity.c
+    
+    I really want to figure out what it functional, who are using them.
+    
+     - rename modesettingEntRec to loongsonEntRec.
+
+commit 2125751f980f313b33c2e3291bf1bbb7f53bcecc
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue May 12 16:14:34 2020 +0800
+
+    update readme
+
+commit 07222eb8fbf03bb837796a53cb761c234b2cb9be
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon May 11 16:52:03 2020 +0800
+
+    document the entity.
+
+commit 84d4e3c4b77d7f2620f36251f8359e4ff82e9495
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon May 11 16:51:02 2020 +0800
+
+    document the ScreenInit()
+
+commit 6ab0126f172478b1287f4a12e2c4817eba07a4f1
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri May 8 15:44:55 2020 +0800
+
+    code improve:
+    
+    1) rename two entity related fucntion
+    
+    2) helpers.c: removed not needed headers.
+    
+    3) rename GetPec to LS_AllocDriverPrivate(), more clearify.
+    
+    4) argument order adjustment.
+    
+    //suijingfeng: void *calloc(size_t nmemb, size_t size);
+    
+    pScrn->driverPrivate = xnfcalloc(1, sizeof(modesettingRec));
+
+commit b5557065039dc0a5e502013c9d13aecfca539760
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri May 8 15:41:06 2020 +0800
+
+    fix build issues when enable DebugPresent
+
+commit 01cb91beb7cf7eb1012c282ccab656ff42e21c4e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu May 7 20:01:56 2020 +0800
+
+    print who are probing more clearly
+
+commit c05421be9f28c305fed1547546461b3320f2b91f
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 6 10:18:14 2020 +0800
+
+    dispatch_dirty_region: dont compare signed int with unsigned int
+
+commit 40bf82b4194abb0a5f70769d28661b6847a5aeb4
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed May 6 10:06:33 2020 +0800
+
+    Dont include xf86Priv.h
+    
+    Things defined in xf86Priv.h and xf86Privstr.h are NOT intended to be visible to video drivers.
+
+commit 939141e14b7f4621295cd1a4051bfe853ebd70d5
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun May 3 22:50:27 2020 +0800
+
+    conf: Add PrimaryGPU option to specify the primary GPU.
+    
+    This option specifies that the matched device should be treated as the primary GPU,
+    replacing the selection of the GPU used as output by the firmware. If multiple output
+    devices match an OutputClass section with the PrimaryGPU option set, the first one
+    enumerated becomes the primary GPU.
+    
+    Our goal is let the display controller(/dev/dri/card0, 0014:7a06) get matched,
+    and being treated as primary GPU, even etnaviv present (/dev/dri/card1, 0014;7a15).
+
+commit 17f94269acf6ae68a93aafb2c4e4095ff4d8009e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 30 21:17:21 2020 +0800
+
+    Supply device class and device class mask data to help
+    server select the device that loongson driver can manage.
+    
+    our goal is let the display controller get matched
+    but to reject gc1000 when using standalone kms driver.
+    
+    but this commit failed achieve that goal, as it is X server
+    doing this job with xf86platformProbe, the X server failed
+    find a primary device when both loongson-drm and etnaviv
+    exist at X server generation.
+    
+    however, this commit is still usefull in the pci probe case.
+
+commit e8f937d379afb527cd7f702706394573eb630527
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 30 15:58:33 2020 +0800
+
+    pEnt is used only oncd in PreInit
+
+commit 7df1f492a8d490df9aa6648f27d9c969366934d2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Apr 29 15:01:42 2020 +0800
+
+    driver: improve msUpdateIntersect function
+    
+    - return value is either true or false
+    - dont compute ((box->y1 * stride) + (box->x1 * cpp)) twice
+    - dont compute i * stride twice
+    - enable shadowfb and double double shadow to enjor its benifit
+
+commit e60f746627d7dba3d740634865976643f8bfdea9
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Apr 28 14:53:11 2020 +0800
+
+    to install 20-loongson.conf in right place
+
+commit 3854ab07ef6baad0a80de99f135607244ea2dd55
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Apr 28 14:23:46 2020 +0800
+
+    check RENDER extension
+
+commit e23186f21afdb09a32148f036fccdf4edbd7fc40
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Apr 28 14:23:13 2020 +0800
+
+    Update readme: document dependency and how to build
+
+commit ce9015844d7e823fdf0cc0792793c1728d160f8a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Apr 28 11:50:35 2020 +0800
+
+    update conf
+
+commit 5bd89fac599a963ba55d971eecab8d23515fbef2
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Tue Apr 28 10:22:01 2020 +0800
+
+    update conf
+
+commit b3a2e7bd5dc8044764d44e015f1d7e9cd09ce7a0
+Author: Sui Jingfeng <suijingfeng@loongson.cn>
+Date:   Tue Apr 28 10:19:38 2020 +0800
+
+    update conf
+
+commit 2a88fac270ccf79a73cb6b5fe54e7dd95ae55811
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Apr 25 20:56:21 2020 +0800
+
+    code refinement and documention the code
+    
+     - MS_LOGLEVEL_DEBUG macro deleted
+
+commit ee75ecb404ac7eed9c79fb4140c7f35f86ce9a0b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Apr 24 10:58:10 2020 +0800
+
+    Update conf: to reject other DDX using modesetting driver.
+
+commit 7eb01a9b2a9bfe83866169cd5cf14821f864fe17
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Apr 24 10:50:24 2020 +0800
+
+    refactor: move Options related stuff to loongson_options.c
+
+commit 76e4b03b05a026afa0f3c7e46f4ca78acd030c10
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 23 23:29:09 2020 +0800
+
+    modularity
+
+commit fe46d3bb64869007490703702b670ff135b2de9c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 23 20:32:04 2020 +0800
+
+    add loongson.conf
+
+commit 8aa3ce92a60586f0e8002af0cda07272af613afc
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 23 20:06:28 2020 +0800
+
+    create modesetting branch
+
+commit 8baed7a9568e6e13f1a5137c3346a0956ca6e787
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 23 20:05:01 2020 +0800
+
+    cleaned
+
+commit d9a15f06fdd9e9b1ca28b1cf795b0c9b63f02bf9
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Apr 12 22:18:40 2020 +0800
+
+    dumb: clean outdated stuff
+
+commit 83197c745025107e03c9a2cbd91d30f893e75544
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 9 15:43:12 2020 +0800
+
+    heavy codeclean: buffer created with armsoc_bo_new_with_dim is just dumb.
+
+commit 587fcb9a8e6edcb51589e6174dc98d7c244f9caa
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 9 15:09:56 2020 +0800
+
+    loading fb module seperately
+
+commit 793cbd4e634fcc9e8f3eb31c974c287558e7ec92
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 9 12:40:39 2020 +0800
+
+    remove src/drmmode_driver.h, support only one arch
+    
+    Signed-off-by: suijingfeng <suijingfeng@loongson.cn>
+
+commit c5fac93bb52bc6c112d654931f8152596909bb09
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Thu Apr 9 00:44:51 2020 +0800
+
+    rapid debuging modify pixmap header
+
+commit a293dbba6553ab39e7f7bd704bf55c7cf8f52e8d
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Apr 8 22:54:01 2020 +0800
+
+    set pixmapOffsetAlign to 256wq
+
+commit 142f088344041a4f6af399005a8451bc7d7b893c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Apr 8 22:04:31 2020 +0800
+
+    Isolate the interface specific function and data into loongson_module.c
+    
+    The interface doing identify, probe, and process xorg.conf options ralated work.
+    It should be small and clear and we want to seperate it from the real heavy-weight driver.
+
+commit 3d2d0906de2ac9601e5c9e5967aacd38ac941e35
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Apr 7 17:47:51 2020 +0800
+
+    code clean
+
+commit 5612bdf7f5a664ed4106356e15fb4e9ee316c734
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Apr 6 23:22:18 2020 +0800
+
+    dri3: add function to check if a fd is a render node
+
+commit 73c4dbe613f328aa3878112cfc168ec410361cdf
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Apr 6 10:30:50 2020 +0800
+
+    display: try enable set gamma
+
+commit 350868a1956187f73479a29dc8771f8cec5450ca
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Apr 6 10:24:00 2020 +0800
+
+    display: code review
+
+commit 29a03d3a0d18d3e7ce96f481206e8ed6efa34f6a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Apr 5 19:01:32 2020 +0800
+
+    trival function rename and code clean
+    
+    - ARMSOCModifyPixmapHeader to LS_ModifyPixmapHeader
+    - ARMSOCPixmapIsOffscreen to LS_PixmapIsOffscreen
+    - xv: small code clean up
+    - dumb: small code align
+    - remove copyright
+
+commit 6db249ec6745bdf0c0e4c53565b937cbc4f3faaf
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Apr 5 18:31:26 2020 +0800
+
+    soft exa: experimental align stripe to 256 bytes and code align
+
+commit c01785d1cd81bdf0bc6a1f3703909b8ebd7b5c7a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Apr 5 18:21:01 2020 +0800
+
+    api compat: remove unused stuffs
+
+commit e766640da6f5811e9a9f37f540d6d83a506fe942
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Apr 5 18:10:54 2020 +0800
+
+    copyright specific information removed: sorry about that
+
+commit 0f5ed91bce0f9b95749079a33f4b09b45e43b614
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Apr 5 17:59:36 2020 +0800
+
+    drmmode_display: trival code align and add informative print, no need to review
+
+commit c61b3ecdb8b7f11f82f4cae9858b3db8f802cea1
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sun Apr 5 17:51:08 2020 +0800
+
+    dri2: trival code align and clean up
+
+commit 8839b722ad30406cc0d92369612ab957563be413
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Apr 4 23:59:31 2020 +0800
+
+    palette: add drmmode_load_palette to compare with LS_LoadPalette
+
+commit ca69587eb84e28b04685df6224d98ebcca92ed1b
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Apr 4 19:21:50 2020 +0800
+
+    palette: Impl Load Palette by mimic drmmode_load_palette proc
+    
+    - RANDR_12_INTERFACE is defined by default, so we remote this macro
+    - but crash with supporting CMAP_RELOAD_ON_MODE_SWITCH
+    - firefox dont tears when opening some large pages
+
+commit 6fc47df51983bed0475ba483db525256687e58f2
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Apr 4 11:11:26 2020 +0800
+
+    dri3: improve LS_DRI3Open by mimic glamor_dri3_open_client
+
+commit a5621108b9615e2c2369c141afc9897d5323114c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Apr 3 23:50:20 2020 +0800
+
+    vblank: trival code clean
+
+commit 96a1a886d162a8d4a9a955ac6d6e1e744c420d95
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Apr 3 23:42:04 2020 +0800
+
+    vblank: remove not need headers
+
+commit f948b9d0d7852f6587e683857db9148cd0822c9a
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Apr 3 21:37:08 2020 +0800
+
+    enable wait vblank on default, we decide to continue developing it
+
+commit 92b404ecdef3df6f6898d38d235617cfe9e4e5e9
+Merge: 6ab634c 72ccfaa
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Fri Apr 3 21:30:07 2020 +0800
+
+    merge vblank specific code to stable branch
+
+commit 72ccfaadf392a23238b19a091c23cd6e9cca6d36
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Mar 31 09:28:46 2020 +0800
+
+    vblank: debug: ARMSOC_PRESENT_DBG_MSG -> VBLANK_DBG_MSG
+
+commit 26f8008741df23804b13c0f9dfc9de3e71cebb9e
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Mar 31 09:22:22 2020 +0800
+
+    change armsoc_drm_handler to DrmHandler and made it a static in vblank.c
+
+commit b3c7246bec15658051541c0bd693f96531784276
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Mar 30 22:59:00 2020 +0800
+
+    ugly vblank refactor
+
+commit 6ab634c63bf666270528f01ca86d6dab7d821d69
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Mar 30 22:59:00 2020 +0800
+
+    augly vblank refactor
+
+commit 59b95464329f343a10a329170c239489d32c2a67
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Mar 30 17:09:19 2020 +0800
+
+    shorten function prefix
+
+commit a4dac60a50fb068ab9d48423ccd62adc4150634c
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Mar 30 16:10:15 2020 +0800
+
+    present: ARMSOC_PRESENT_FLIP -> LOONGSON_PRESENT_FLIP
+
+commit 43d61c2c9b1f6ee7f862d77b963fc787f073ff50
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Mar 30 14:37:24 2020 +0800
+
+    provide a simple xorg.conf
+
+commit f04a0232ebce54e0790d843a4dffc6a7f2cea7ed
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Mon Mar 30 14:05:54 2020 +0800
+
+    code clean
+
+commit 639da2372c32765ff2ad880ba75061651cc29589
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Mar 25 10:00:37 2020 +0800
+
+    ModifyPixmapHeader is runtime proc, don't let it print
+
+commit c004a56a0577d552576f077e148886a54ed05001
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Mar 25 09:56:00 2020 +0800
+
+    let chipset name = driver name
+
+commit ea8b55e22f1d85023902b14bcf06f02a12c30b07
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Wed Mar 25 09:50:36 2020 +0800
+
+    code clean: align and replace some EARLY_MESSAGE macro
+
+commit d20f455f8304d3f16a5dce3f552431db63cd4d94
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Tue Mar 24 11:27:07 2020 +0800
+
+    trival code align
+
+commit 8319ebddc1634b4814c83d26694d6a57068fabc0
+Author: suijingfeng <suijingfeng@loongson.cn>
+Date:   Sat Mar 7 09:40:44 2020 +0800
+
+    Initial add support to loongson7a1000
+    
+     - Update readme: Install the driverneme_drv.so to /usr/lib64/
+     - Change the CFLAGS and ASFLAGS: adapt it to MIPS arch correctly.
+     - Solve DRI2 driver loading problems(armsoc to loongson-drm)
+     - Add gitignore
+     - Enable soft exa print log
+     - Code clean up: convert oamp5 to loongson7a
+     - Enable present extension
+
+commit ca78c0165ebbce23bbca84c4bf9b891e8c564986
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue Jun 5 08:42:12 2018 +0200
+
+    cleanup
+
+commit 472f7a0332360d331935477756bd60858a3360f9
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon Jun 4 09:41:39 2018 +0200
+
+    trapezoids & triangles optimization
+
+commit fee6e7c95f1a41172be0c3164356598ed35550d3
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri Jun 1 09:10:40 2018 +0200
+
+    use libdrm_etnaviv
+
+commit b2a4961edee584199273b0d9eeb2aba052854b02
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri Jun 1 09:09:38 2018 +0200
+
+    use libdrm_etnaviv
+
+commit a98d3afe41ad481673bf2100a79ebf0699eb7d66
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 30 21:12:27 2018 +0200
+
+    refactoring
+
+commit e568d8d7a9e7db6c2fad807ebeeccbd02c6e15c8
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon May 28 08:56:36 2018 +0200
+
+    tweak cache + componentAlpha mask
+
+commit 8a06d74998d61cc8ce82da2696e38c3d7c5902e2
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 27 20:28:30 2018 +0200
+
+    fix for debian 9 xorg 1.19
+
+commit ce98719816721db24bdc7b17beb5bc6b86ff5c31
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 27 16:08:08 2018 +0200
+
+    optimizations
+
+commit c87a9bd337ce7c9ff5b2ba1f158e60589c0acf1d
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat May 26 20:12:22 2018 +0200
+
+    small cache improvement
+
+commit 2c3f3356633383b2710fc7ccf5ee1193299eb38c
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 24 23:16:48 2018 +0200
+
+    cleanup
+
+commit a501eecb138d2bdb300a5b5fd58b714a40d6b54f
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 23 20:55:33 2018 +0200
+
+    fix bo leak + cleanup present
+
+commit 794eebea72dd4d387f3fbe0be3afe7e88f993b24
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue May 22 23:30:29 2018 +0200
+
+    improve etnaviv cache manager + fix memory leak
+
+commit d10cb39bd9ca51ac9a15315bf23d8610fb71308d
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue May 22 08:20:21 2018 +0200
+
+    improve card detection
+
+commit ac86e07a5b6543cc221d3f0c71bf1fe600fc130d
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon May 21 19:13:14 2018 +0200
+
+    fix xv
+
+commit 80ee8d0a27ba76babb9a3f1cbee3c3b1c97921a0
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon May 21 10:11:34 2018 +0200
+
+    fix PictOpOver bug
+
+commit 1333ab3b196622f267d187b90e2340d2edccffd4
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri May 18 09:45:57 2018 +0200
+
+    cleanup & small fixes
+
+commit 00d826d0574e9d90508b30393e31a688f11bd140
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 17 23:12:50 2018 +0200
+
+    huge performance improvement
+
+commit 5a234d22cff3845e689944b877e5f393efb5cbc9
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 16 19:15:30 2018 +0200
+
+    cleanup
+
+commit d87bedb2fd1e1be252346752555592bb15a86882
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue May 15 22:18:42 2018 +0200
+
+    etna_bo cache refactoring for optimization
+
+commit edad12beb0cc953c8393ec02c0a99d602247dcbc
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 13 18:47:17 2018 +0200
+
+    optimizations
+
+commit 371673ec7a066b50502249ad4cb90a66c7586641
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat May 12 11:15:51 2018 +0200
+
+    cleanup
+
+commit fea0a22449fd0ea33a2b8382c1b189ad47ae0876
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat May 12 09:18:32 2018 +0200
+
+    improve cache manager + fix memory leak
+
+commit e730fa414e18efb2e2ae702c63f4fd99916977eb
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri May 11 22:59:27 2018 +0200
+
+    fix double etna bo del
+
+commit eda84479afdb2de38ae0ce50e9a28502c757fe18
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri May 11 20:29:47 2018 +0200
+
+    optimizations
+
+commit 37442745b0bb79f01cf6abd9260297e24e44622d
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri May 11 17:37:34 2018 +0200
+
+    test gpu clear surface
+
+commit 1b7058b74be1716257073d4e3e292f7bedcac817
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri May 11 14:58:32 2018 +0200
+
+    test soft A8 dest
+
+commit 355ec7e4baedc9c0c1663d7331c19c3897724584
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri May 11 12:54:01 2018 +0200
+
+    cleanup
+
+commit 67b7518af7f3889333f355cc8d0a3867b2235dac
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 10 20:25:12 2018 +0200
+
+    fixes and tweaks
+
+commit 921b9c3f19b8a4cc03df3b289a0ffa3b21becd95
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 10 19:34:32 2018 +0200
+
+    small fixes
+
+commit 80418ddd8c13974c37daede24d1a1b2425115f74
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 10 12:36:18 2018 +0200
+
+    tweaks
+
+commit 8685dadf243f949cb9763e630e60402a0ca48f0a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 10 11:14:58 2018 +0200
+
+    test usermem
+
+commit c2d7901a0f2893fad5d758de90067baa18fc3b81
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 10 08:53:44 2018 +0200
+
+    fix clear reused etna bo cache
+
+commit c41dc7034e234a3641d5aa25f0bca776b5458b79
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu May 10 07:37:30 2018 +0200
+
+    clear reused etna bo cache buffers
+
+commit 4324fb3d26be00e81df7a43fb034c9490b8662a2
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 9 21:21:15 2018 +0200
+
+    isolated a bug with recyclated etna bo
+
+commit 8d574df84e530e4c346f1f3d17d5778f591d8e8b
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 9 16:19:44 2018 +0200
+
+    add auto flush
+
+commit bb7bdb54c99628cc20db88d601318fcc32d0f327
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 9 12:06:48 2018 +0200
+
+    revert to original drmmode_display.c
+
+commit 56fdb0efd51af28d53ac0bc773b0a9b61c6ba89c
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 9 11:58:08 2018 +0200
+
+    refactoring & improve etna bo cache
+
+commit acaf25c6455f93ca3f710d913d3c6d76390a2d2b
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed May 9 07:57:55 2018 +0200
+
+    cleanup & refactoring
+
+commit aa913f7b9a5ebfc604c0285c10c2711b8635cffb
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue May 8 23:54:37 2018 +0200
+
+    implement own etnaviv drm driver to fix cache bug
+
+commit 8bed075d5fd37deeeb793d97d9c8de940833b6b8
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue May 8 10:10:29 2018 +0200
+
+    WIP
+
+commit a6d306f243bf7112a3e4c8cc17f9941c6719383b
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon May 7 19:07:37 2018 +0200
+
+    cleanup
+
+commit 84526f8cb085515997c8e9aab79c23fb9480098a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon May 7 17:08:35 2018 +0200
+
+    test etnaviv usermem mapping
+
+commit 36e4bbef3b4eab09e6f66f3e5920753acb82ee6d
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 6 18:02:45 2018 +0000
+
+    backport some optimizations from others xf86-video-armsoc
+
+commit 5414ec47c9526757e78e944f14d2265dda1a2edc
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 6 17:08:31 2018 +0000
+
+    cleanup
+
+commit ad760952c87f76f555cd3f602bed916354eb5168
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 6 16:45:42 2018 +0000
+
+    tweaks & always gpu xv+dri
+
+commit ab32436820d79f64a250876d79cc5e1f14e78022
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 6 12:26:21 2018 +0000
+
+    cleanup
+
+commit 7f30deb586f939130ad7f0ee81bc5f37702fd803
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 6 12:14:09 2018 +0000
+
+    remove umplock
+
+commit ae94f53fd18425c470f598b8a695350bd31173d4
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun May 6 11:35:41 2018 +0000
+
+    WIP avoid creating every surface with gpu
+
+commit 5efc4bbe4bc5bf265bfebf40229a798b34bd1002
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat May 5 11:15:50 2018 +0000
+
+    cleanup & optimizations
+
+commit ce983ce4bfecf16c8289c1dda32c02e24e4b6e19
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon Apr 30 18:21:28 2018 +0000
+
+    fix cursor bug
+
+commit a998ff8d6144adfcf6281b3c3b65342cf2e8fbd8
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Apr 28 11:38:42 2018 +0000
+
+    add some info about dri3wsegl
+
+commit ce2c70e21cf302889608dccfdfbe135c6a87bdf7
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Sep 6 11:54:51 2017 +0000
+
+    cleanup and misc improvements
+
+commit 68608b9243a4bf8dbac846550702a1254512f9e2
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Sep 2 06:12:43 2017 +0000
+
+    change driver name to 'omap5' and update README
+
+commit c128cc867c21e132aaa7c370ed64c5532720de6a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri Sep 1 22:01:49 2017 +0000
+
+    DRI2 & DRI3
+
+commit ebebc8ec4dab0f6e93601631b0a8e5baab058374
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Mar 12 11:04:02 2017 +0100
+
+    cleanup
+
+commit f5f2b7fc95e581fc86e68c0f2f09c182d83cc3d8
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu Mar 9 18:26:06 2017 +0100
+
+    misc
+
+commit 938160437a76a34397b31606fee8a192544f3bad
+Merge: d7dd719 cdf31a5
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Feb 8 20:12:40 2017 +0100
+
+    Merge branch 'master' of github.com:julbouln/xf86-video-armsoc-omap5
+
+commit d7dd719312ebee81308ff9c28b23ba9b0b6aa2e8
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Feb 8 20:12:24 2017 +0100
+
+    hardware cursor
+
+commit cdf31a5c036120603219157a2014d9f43de8f87d
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon Jan 30 20:58:44 2017 +0000
+
+    bugfix XV
+
+commit 2da02b2edc867a2182662d7f76e295ec527d99e2
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Jan 7 06:29:37 2017 +0100
+
+    fix hidden cursor bug
+
+commit daca2f5dde65661a5d975d8eb60e1b47c701998a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon Dec 19 10:09:01 2016 +0100
+
+    XV clip
+
+commit d67d64c7d5c77b9bc95fdc9482a28e7ac5cdf886
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Dec 18 19:05:40 2016 +0100
+
+    XV
+
+commit 706617011cee62bef7edd45b8c870b9a815aef78
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Dec 18 12:22:54 2016 +0100
+
+    XV WIP
+
+commit d055a952b48194292dc990dbcef6c5af4c7b34b5
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Dec 17 19:51:06 2016 +0100
+
+    XV WIP
+
+commit eb023eef3325acd0feba644b3559eefc857c63c8
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Dec 14 21:41:54 2016 +0100
+
+    fix + optimization
+
+commit ad41af7afafdfa150e7d1b4724ee6c2c29182192
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Dec 14 12:33:35 2016 +0100
+
+    initial present
+
+commit 7c72f444df6d8cf430eb2c6e2f7b9d22bd5ddf7a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue Dec 13 22:42:49 2016 +0100
+
+    optimizations
+
+commit 9948892b9e5acccd0f76550567dc2c2917586c37
+Author: julbouln <jboulnois@gmail.com>
+Date:   Tue Dec 13 09:29:53 2016 +0100
+
+    unoptimized but working 24bits
+
+commit 67d3a4fece361b5107f89b8c6f849d67a7eda952
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon Dec 12 22:19:38 2016 +0100
+
+    working dri3!
+
+commit 5e01f8e16b0edea6b58694e26b580855d503d6f0
+Author: julbouln <jboulnois@gmail.com>
+Date:   Mon Dec 12 21:25:05 2016 +0100
+
+    revert per op attach
+
+commit 1500e78974c681a1f31e0e055f28d0d3e4e97d2a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Dec 11 17:30:45 2016 +0100
+
+    refactoring + fix
+
+commit 6181652d7619f3ae07e16dbd1281daad2db249d4
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Dec 11 12:13:12 2016 +0100
+
+    copy bugfix
+
+commit 6505b2c06435508754fc07d39168fdde101455e6
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Dec 11 10:51:13 2016 +0100
+
+    refactoring + fix : 16bits depth ok, 24 still have problems with composite
+
+commit 6a36b2d62ce9757e20ac28fefe7b1f11e64f10ab
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Dec 10 18:38:27 2016 +0100
+
+    cleanup
+
+commit f9cb98935c9fe4d913ed802e88c425caeb486c78
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Dec 10 17:33:20 2016 +0100
+
+    A8 src composite
+
+commit a89d2ff5a49afd56fa6789bcd2d65d3e7c41c04a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Dec 10 13:05:11 2016 +0100
+
+    WIP
+
+commit 33370a0cc4ab3f6df480da2f0d279e709d597398
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu Dec 8 23:25:48 2016 +0100
+
+    WIP
+
+commit 4d6d79ec47de182e7d4c53971af623d827252d0a
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Dec 7 23:23:56 2016 +0100
+
+    WIP optimizations + fixes
+
+commit 6166913b9815baebe2dda0e693b020ce89f77e6c
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Dec 4 17:56:11 2016 +0100
+
+    optimization + fix mask
+
+commit ac42ba5c9251c0889d090385eddc056b11dfb5b3
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sun Dec 4 13:17:33 2016 +0100
+
+    optimizations + fix mask
+
+commit f605b9d4fa38f8da6d444417c60d51e414f81d30
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Dec 3 20:07:34 2016 +0100
+
+    WIP optimizations
+
+commit 4df68cfe14485b049a8f6949b7cefdea52ee1013
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Dec 3 14:12:25 2016 +0100
+
+    optimizations WIP
+
+commit 4e00f66a140a113b6f34b5bcd5d6f5975dd01842
+Author: julbouln <jboulnois@gmail.com>
+Date:   Sat Dec 3 09:18:46 2016 +0100
+
+    cleanup
+
+commit 866cd8907693cb74fb00918d7b1e718e5e8e0575
+Author: julbouln <jboulnois@gmail.com>
+Date:   Fri Dec 2 20:27:35 2016 +0100
+
+    cleanup
+
+commit 616c5ea1795f28b56de3c90681a7a6901b230977
+Author: julbouln <jboulnois@gmail.com>
+Date:   Thu Dec 1 21:10:48 2016 +0100
+
+    try to fix etnaviv module kernel panic
+
+commit a5bb8d4fe6a5c5e66a18713b57ef2e02698ceae1
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Nov 30 19:39:57 2016 +0100
+
+    composite mask bugfix
+
+commit 5d740f0b502a4b7cbcc3f731869298af7471d8d3
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Nov 30 13:43:23 2016 +0100
+
+    dri3 support
+
+commit e1a99602d356b08f52bb117d8a154c67409f2256
+Author: julbouln <jboulnois@gmail.com>
+Date:   Wed Nov 30 08:36:07 2016 +0100
+
+    first commit

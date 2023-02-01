@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -44,35 +44,7 @@
 #include "loongson_debug.h"
 
 
-struct ms_exa_prepare_args {
-    struct {
-        int alu;
-        Pixel planemask;
-        Pixel fg;
-    } solid;
-
-    struct {
-        PixmapPtr pSrcPixmap;
-        int alu;
-        Pixel planemask;
-    } copy;
-
-    struct {
-        int op;
-        PicturePtr pSrcPicture;
-        PicturePtr pMaskPicture;
-        PicturePtr pDstPicture;
-        PixmapPtr pSrc;
-        PixmapPtr pMask;
-        PixmapPtr pDst;
-
-        int rotate;
-        Bool reflect_y;
-    } composite;
-};
-
-static struct ms_exa_prepare_args exa_prepare_args = {{0}};
-
+static struct ms_exa_prepare_args fake_exa_prepare_args = {{0}};
 
 /**
  * PrepareAccess() is called before CPU access to an offscreen pixmap.
@@ -129,13 +101,12 @@ static Bool fake_exa_prepare_access(PixmapPtr pPix, int index)
 
     if (pPix->devPrivate.ptr)
     {
-        xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-                    "%s: already prepared\n", __func__);
+        DEBUG_MSG("%s: already prepared\n", __func__);
 
         return TRUE;
     }
 
-    if (LS_IsDumbPixmap(priv->usage_hint))
+    if (priv->bo)
     {
         ret = dumb_bo_map(pDrmMode->fd, priv->bo);
         if (ret)
@@ -145,11 +116,16 @@ static Bool fake_exa_prepare_access(PixmapPtr pPix, int index)
                        __func__, strerror(errno), ret);
             return FALSE;
         }
-        pPix->devPrivate.ptr = priv->bo->ptr;
+
+        pPix->devPrivate.ptr = dumb_bo_cpu_addr(priv->bo);
+        priv->is_mapped = TRUE;
+        return TRUE;
     }
-    else
+
+    if (priv->pBuf)
     {
         pPix->devPrivate.ptr = priv->pBuf->pDat;
+        priv->is_mapped = TRUE;
     }
 
     /* When !NULL, devPrivate.ptr points to the raw pixel data */
@@ -169,17 +145,25 @@ static Bool fake_exa_prepare_access(PixmapPtr pPix, int index)
  */
 static void fake_exa_finish_access(PixmapPtr pPixmap, int index)
 {
-/*
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
 
-    if (priv && priv->bo)
+    if (!priv)
+        return;
+
+    if (priv->pBuf)
     {
         pPixmap->devPrivate.ptr = NULL;
+        priv->is_mapped = FALSE;
     }
-*/
+
+    if (0 && priv->bo)
+    {
+        pPixmap->devPrivate.ptr = NULL;
+        dumb_bo_unmap(priv->bo);
+        priv->is_mapped = FALSE;
+    }
 }
 
-/////////////////////////////////////////////////////////////////////////
 
 static Bool PrepareSolidFail(PixmapPtr pPixmap, int alu, Pixel planemask,
         Pixel fill_colour)
@@ -205,8 +189,6 @@ static Bool PrepareCompositeFail(int op, PicturePtr pSrcPicture, PicturePtr pMas
     return FALSE;
 }
 
-/////////////////////////////////////////////////////////////////////////
-
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -218,9 +200,9 @@ static Bool ms_exa_prepare_solid(PixmapPtr pPixmap,
                                  Pixel planemask,
                                  Pixel fg)
 {
-    exa_prepare_args.solid.alu = alu;
-    exa_prepare_args.solid.planemask = planemask;
-    exa_prepare_args.solid.fg = fg;
+    fake_exa_prepare_args.solid.alu = alu;
+    fake_exa_prepare_args.solid.planemask = planemask;
+    fake_exa_prepare_args.solid.fg = fg;
 
     return TRUE;
 }
@@ -232,9 +214,9 @@ static void ms_exa_solid(PixmapPtr pPixmap, int x1, int y1, int x2, int y2)
     GCPtr gc = GetScratchGC(pPixmap->drawable.depth, screen);
     ChangeGCVal val[3];
 
-    val[0].val = exa_prepare_args.solid.alu;
-    val[1].val = exa_prepare_args.solid.planemask;
-    val[2].val = exa_prepare_args.solid.fg;
+    val[0].val = fake_exa_prepare_args.solid.alu;
+    val[1].val = fake_exa_prepare_args.solid.planemask;
+    val[2].val = fake_exa_prepare_args.solid.fg;
     ChangeGC(NullClient, gc, GCFunction | GCPlaneMask | GCForeground, val);
     ValidateGC(&pPixmap->drawable, gc);
 
@@ -262,9 +244,9 @@ static Bool ms_exa_prepare_copy(PixmapPtr pSrcPixmap,
                     PixmapPtr pDstPixmap,
                     int dx, int dy, int alu, Pixel planemask)
 {
-    exa_prepare_args.copy.pSrcPixmap = pSrcPixmap;
-    exa_prepare_args.copy.alu = alu;
-    exa_prepare_args.copy.planemask = planemask;
+    fake_exa_prepare_args.copy.pSrcPixmap = pSrcPixmap;
+    fake_exa_prepare_args.copy.alu = alu;
+    fake_exa_prepare_args.copy.planemask = planemask;
 
     return TRUE;
 }
@@ -273,15 +255,15 @@ static Bool ms_exa_prepare_copy(PixmapPtr pSrcPixmap,
 static void ms_exa_copy(PixmapPtr pDstPixmap, int srcX, int srcY,
             int dstX, int dstY, int width, int height)
 {
-    PixmapPtr pSrcPixmap = exa_prepare_args.copy.pSrcPixmap;
+    PixmapPtr pSrcPixmap = fake_exa_prepare_args.copy.pSrcPixmap;
     ScreenPtr screen = pDstPixmap->drawable.pScreen;
     ChangeGCVal val[2];
     GCPtr gc;
 
     gc = GetScratchGC(pDstPixmap->drawable.depth, screen);
 
-    val[0].val = exa_prepare_args.copy.alu;
-    val[1].val = exa_prepare_args.copy.planemask;
+    val[0].val = fake_exa_prepare_args.copy.alu;
+    val[1].val = fake_exa_prepare_args.copy.planemask;
     ChangeGC(NullClient, gc, GCFunction | GCPlaneMask, val);
     ValidateGC(&pDstPixmap->drawable, gc);
 
@@ -324,12 +306,12 @@ static Bool ms_exa_prepare_composite(int op,
                          PicturePtr pDstPicture,
                          PixmapPtr pSrc, PixmapPtr pMask, PixmapPtr pDst)
 {
-    exa_prepare_args.composite.op = op;
-    exa_prepare_args.composite.pSrcPicture = pSrcPicture;
-    exa_prepare_args.composite.pMaskPicture = pMaskPicture;
-    exa_prepare_args.composite.pDstPicture = pDstPicture;
-    exa_prepare_args.composite.pSrc = pSrc;
-    exa_prepare_args.composite.pMask = pMask;
+    fake_exa_prepare_args.composite.op = op;
+    fake_exa_prepare_args.composite.pSrcPicture = pSrcPicture;
+    fake_exa_prepare_args.composite.pMaskPicture = pMaskPicture;
+    fake_exa_prepare_args.composite.pDstPicture = pDstPicture;
+    fake_exa_prepare_args.composite.pSrc = pSrc;
+    fake_exa_prepare_args.composite.pMask = pMask;
 
     return TRUE;
 }
@@ -339,12 +321,12 @@ static void ms_exa_composite(PixmapPtr pDst, int srcX, int srcY,
                  int maskX, int maskY, int dstX, int dstY,
                  int width, int height)
 {
-    PicturePtr pSrcPicture = exa_prepare_args.composite.pSrcPicture;
-    PicturePtr pMaskPicture = exa_prepare_args.composite.pMaskPicture;
-    PicturePtr pDstPicture = exa_prepare_args.composite.pDstPicture;
-    PixmapPtr pSrc = exa_prepare_args.composite.pSrc;
-    PixmapPtr pMask = exa_prepare_args.composite.pMask;
-    int op = exa_prepare_args.composite.op;
+    PicturePtr pSrcPicture = fake_exa_prepare_args.composite.pSrcPicture;
+    PicturePtr pMaskPicture = fake_exa_prepare_args.composite.pMaskPicture;
+    PicturePtr pDstPicture = fake_exa_prepare_args.composite.pDstPicture;
+    PixmapPtr pSrc = fake_exa_prepare_args.composite.pSrc;
+    PixmapPtr pMask = fake_exa_prepare_args.composite.pMask;
+    int op = fake_exa_prepare_args.composite.op;
 
     if (pMask)
     {
@@ -374,25 +356,147 @@ static void ms_exa_composite_done(PixmapPtr pPixmap)
 
 //////////////////////////////////////////////////////////////////////////
 
+/**
+ * UploadToScreen() loads a rectangle of data from src into pDst.
+ *
+ * @param pDst destination pixmap
+ * @param x destination X coordinate.
+ * @param y destination Y coordinate
+ * @param width width of the rectangle to be copied
+ * @param height height of the rectangle to be copied
+ * @param src pointer to the beginning of the source data
+ * @param src_pitch pitch (in bytes) of the lines of source data.
+ *
+ * UploadToScreen() copies data in system memory beginning at src (with
+ * pitch src_pitch) into the destination pixmap from (x, y) to
+ * (x + width, y + height).  This is typically done with hostdata uploads,
+ * where the CPU sets up a blit command on the hardware with instructions
+ * that the blit data will be fed through some sort of aperture on the card.
+ *
+ * If UploadToScreen() is performed asynchronously, it is up to the driver
+ * to call exaMarkSync().  This is in contrast to most other acceleration
+ * calls in EXA.
+ *
+ * UploadToScreen() can aid in pixmap migration, but is most important for
+ * the performance of exaGlyphs() (antialiased font drawing) by allowing
+ * pipelining of data uploads, avoiding a sync of the card after each glyph.
+ *
+ * @return TRUE if the driver successfully uploaded the data.  FALSE
+ * indicates that EXA should fall back to doing the upload in software.
+ *
+ * UploadToScreen() is not required, but is recommended if Composite
+ * acceleration is supported.
+ */
 
-/*
-
-static Bool
-ms_exa_upload_to_screen(PixmapPtr pDst, int x, int y, int w, int h,
-                        char *src, int src_pitch)
+static Bool fake_exa_upload_to_screen(PixmapPtr pPix,
+                                      int x, int y, int w, int h,
+                                      char *pSrc, int src_stride)
 {
-    return FALSE;
+    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
+    char *pDst;
+    unsigned int dst_stride;
+    unsigned int len;
+    int cpp;
+    int i;
+
+    if (priv == NULL)
+        return FALSE;
+
+    cpp = (pPix->drawable.bitsPerPixel + 7) / 8;
+
+    fake_exa_prepare_access(pPix, 0);
+
+    pDst = (char *)pPix->devPrivate.ptr;
+
+    dst_stride = exaGetPixmapPitch(pPix);
+
+    pDst += y * dst_stride + x * cpp;
+    len = w * cpp;
+    for (i = 0; i < h; ++i)
+    {
+        memcpy(pDst, pSrc, len);
+        pDst += dst_stride;
+        pSrc += src_stride;
+    }
+
+    fake_exa_finish_access(pPix, 0);
+
+    return TRUE;
 }
 
-static Bool
-ms_exa_download_from_screen(PixmapPtr pSrc, int x, int y, int w, int h,
-                            char *dst, int dst_pitch)
+/**
+ * DownloadFromScreen() loads a rectangle of data from pSrc into dst
+ *
+ * @param pSrc source pixmap
+ * @param x source X coordinate.
+ * @param y source Y coordinate
+ * @param width width of the rectangle to be copied
+ * @param height height of the rectangle to be copied
+ * @param dst pointer to the beginning of the destination data
+ * @param dst_pitch pitch (in bytes) of the lines of destination data.
+ *
+ * DownloadFromScreen() copies data from offscreen memory in pSrc from
+ * (x, y) to (x + width, y + height), to system memory starting at
+ * dst (with pitch dst_pitch).  This would usually be done
+ * using scatter-gather DMA, supported by a DRM call, or by blitting to AGP
+ * and then synchronously reading from AGP.  Because the implementation
+ * might be synchronous, EXA leaves it up to the driver to call
+ * exaMarkSync() if DownloadFromScreen() was asynchronous.  This is in
+ * contrast to most other acceleration calls in EXA.
+ *
+ * DownloadFromScreen() can aid in the largest bottleneck in pixmap
+ * migration, which is the read from framebuffer when evicting pixmaps from
+ * framebuffer memory.  Thus, it is highly recommended, even though
+ * implementations are typically complicated.
+ *
+ * @return TRUE if the driver successfully downloaded the data.  FALSE
+ * indicates that EXA should fall back to doing the download in software.
+ *
+ * DownloadFromScreen() is not required, but is highly recommended.
+ */
+
+/**
+ * Does fake acceleration of DownloadFromScren using memcpy.
+ */
+static Bool fake_exa_download_from_screen(PixmapPtr pPix,
+                                          int x, int y, int w, int h,
+                                          char *pDst, int dst_stride)
 {
-    return FALSE;
+    // struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPix);
+    int cpp = (pPix->drawable.bitsPerPixel + 7) / 8;
+    char *pSrc;
+    unsigned int src_stride;
+    unsigned int len;
+    int i;
+
+    fake_exa_prepare_access(pPix, 0);
+
+    pSrc = (char *)pPix->devPrivate.ptr;
+
+    if (!pSrc)
+    {
+        ERROR_MSG("%s: src is null\n", __func__);
+        return FALSE;
+    }
+
+    src_stride = exaGetPixmapPitch(pPix);
+
+    DEBUG_MSG("%s: (%dx%d) surface at (%d, %d) dst_stride=%d, src_stride=%d\n",
+               __func__, w, h, x, y, dst_stride, src_stride);
+
+    pSrc += y * src_stride + x * cpp;
+    len = w * cpp;
+    for (i = 0; i < h; ++i)
+    {
+        memcpy(pDst, pSrc, len);
+        pDst += dst_stride;
+        pSrc += src_stride;
+    }
+
+    fake_exa_finish_access(pPix, 0);
+
+    return TRUE;
 }
-
-*/
-
 
 static void fake_exa_wait_marker(ScreenPtr pScreen, int marker)
 {
@@ -421,7 +525,7 @@ static void fake_exa_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
 {
     struct exa_pixmap_priv *pPriv = (struct exa_pixmap_priv *) driverPriv;
 
-    if (LS_IsDumbPixmap(pPriv->usage_hint))
+    if (pPriv->bo)
     {
         LS_DestroyDumbPixmap(pScreen, driverPriv);
     }
@@ -431,28 +535,7 @@ static void fake_exa_destroy_pixmap(ScreenPtr pScreen, void *driverPriv)
     }
 }
 
-/*
-static Bool ms_exa_modify_pixmap_header(PixmapPtr pPixmap,
-        int width, int height, int depth, int bitsPerPixel,
-        int devKind, pointer pPixData)
-{
-    struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
-
-    if ( LS_IsDumbPixmap(priv->usage_hint) )
-    {
-        return LS_ModifyDumbPixmapHeader(pPixmap, width, height,
-                depth, bitsPerPixel, devKind, pPixData);
-    }
-    else
-    {
-        return LS_ModifyExaPixmapHeader(pPixmap, width, height,
-                depth, bitsPerPixel, devKind, pPixData);
-    }
-}
-*/
-
 /* Hooks to allow driver to its own pixmap memory management */
-
 static void *fake_exa_create_pixmap2(ScreenPtr pScreen,
                                      int width,
                                      int height,
@@ -461,16 +544,16 @@ static void *fake_exa_create_pixmap2(ScreenPtr pScreen,
                                      int bitsPerPixel,
                                      int *new_fb_pitch)
 {
-    if (LS_IsDumbPixmap(usage_hint))
+    if (usage_hint == CREATE_PIXMAP_USAGE_SCANOUT)
     {
+        xf86Msg(X_INFO, "allocate %dx%d dumb bo\n", width, height);
+
         return LS_CreateDumbPixmap(pScreen, width, height, depth,
                                    usage_hint, bitsPerPixel, new_fb_pitch);
     }
-    else
-    {
-        return LS_CreateExaPixmap(pScreen, width, height, depth,
-                                  usage_hint, bitsPerPixel, new_fb_pitch);
-    }
+
+    return LS_CreateExaPixmap(pScreen, width, height, depth,
+                              usage_hint, bitsPerPixel, new_fb_pitch);
 }
 
 
@@ -496,61 +579,24 @@ static Bool fake_exa_pixmap_is_offscreen(PixmapPtr pPixmap)
     //
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
 
-    if (priv == NULL)
+    if (!priv)
     {
         return FALSE;
     }
 
-    if (LS_IsDumbPixmap(priv->usage_hint))
+    if (priv->bo)
     {
-        return (priv->bo != NULL);
+        return TRUE;
     }
-    else
+
+    if (priv->pBuf)
     {
-        return (priv->pBuf->pDat != NULL);
+        return TRUE;
     }
+
+    return TRUE;
 }
 
-
-//////////////////////////////////////////////////////////////////////
-//   This two is for PRIME and Reverse Prime, not tested ...
-//////////////////////////////////////////////////////////////////////
-
-static Bool ms_exa_back_pixmap_from_fd(PixmapPtr pixmap,
-                                int fd,
-                                CARD16 width,
-                                CARD16 height,
-                                CARD16 stride,
-                                CARD8 depth,
-                                CARD8 bpp)
-{
-    ScreenPtr pScreen = pixmap->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    struct dumb_bo *bo;
-    Bool ret;
-
-    bo = dumb_get_bo_from_fd(pDrmMode->fd, fd, stride, stride * height);
-    if (!bo)
-    {
-        return FALSE;
-    }
-
-    pScreen->ModifyPixmapHeader(pixmap, width, height,
-                                depth, bpp, stride, NULL);
-
-    ret = ls_exa_set_pixmap_bo(pScrn, pixmap, bo, TRUE);
-    if (ret == FALSE)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                        "%s: ms_exa_set_pixmap_bo failed\n", __func__);
-
-        dumb_bo_destroy(pDrmMode->fd, bo);
-    }
-
-    return ret;
-}
 
 /////////////////////////////////////////////////////////////////////////////////
 //                  this guy do the real necessary initial job
@@ -567,7 +613,7 @@ Bool setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->exa_minor = EXA_VERSION_MINOR;
 
     pExaDrv->pixmapOffsetAlign = 16;
-    pExaDrv->pixmapPitchAlign = 256;
+    pExaDrv->pixmapPitchAlign = LOONGSON_DUMB_BO_ALIGN;
 
     pExaDrv->maxX = 8192;
     pExaDrv->maxY = 8192;
@@ -593,10 +639,8 @@ Bool setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->Composite = ms_exa_composite;
     pExaDrv->DoneComposite = ms_exa_composite_done;
 
-
-    /* TODO: Impl upload/download */
-    // pExaDrv->UploadToScreen = ms_exa_upload_to_screen;
-    // pExaDrv->DownloadFromScreen = ms_exa_download_from_screen;
+    pExaDrv->UploadToScreen = fake_exa_upload_to_screen;
+    pExaDrv->DownloadFromScreen = fake_exa_download_from_screen;
 
     pExaDrv->WaitMarker = fake_exa_wait_marker;
     pExaDrv->MarkSync = fake_exa_mark_sync;
@@ -607,7 +651,8 @@ Bool setup_fake_exa(ScrnInfoPtr pScrn, ExaDriverPtr pExaDrv)
     pExaDrv->PixmapIsOffscreen = fake_exa_pixmap_is_offscreen;
 
 
-    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
+    if ((pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE) ||
+        (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE))
     {
         /* Always fallback for software operations */
         pExaDrv->PrepareCopy = PrepareCopyFail;

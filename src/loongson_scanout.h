@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,9 +28,42 @@
 
 #include <xf86str.h>
 
-Bool LS_CreateFrontBO(ScrnInfoPtr pScrn, struct drmmode_rec * const pDrmMode);
-void LS_FreeFrontBO(ScrnInfoPtr pScrn, struct drmmode_rec * const pDrmMode);
-void *LS_MapFrontBO(ScrnInfoPtr pScrn, struct drmmode_rec * const pDrmMode);
+struct DrmModeBO *
+LS_CreateFrontBO(ScrnInfoPtr pScrn,
+                 int drm_fd,
+                 int width,
+                 int height,
+                 int bpp);
 
+void *LS_MapFrontBO(ScrnInfoPtr pScrn,
+                    int drm_fd,
+                    struct DrmModeBO *pFrontBO);
+
+void LS_FreeFrontBO(ScrnInfoPtr pScrn,
+                    int drm_fd,
+                    uint32_t fb_id,
+                    struct DrmModeBO *pFBO);
+
+Bool loongson_crtc_get_fb_id(xf86CrtcPtr crtc,
+                             uint32_t *fb_id,
+                             int *x,
+                             int *y);
+
+Bool loongson_pixmap_get_fb_id(PixmapPtr pPixmap, uint32_t *fb_id);
+
+Bool loongson_create_scanout_pixmap(ScrnInfoPtr pScrn,
+                                    int width,
+                                    int height,
+                                    PixmapPtr *ppScanoutPix);
+
+int drmmode_bo_import(drmmode_ptr drmmode,
+                      drmmode_bo *bo,
+                      uint32_t *fb_id);
+
+uint32_t drmmode_bo_get_pitch(drmmode_bo *bo);
+uint32_t drmmode_bo_get_handle(drmmode_bo *bo);
+void *drmmode_bo_get_cpu_addr(drmmode_bo *bo);
+
+int drmmode_bo_destroy(drmmode_ptr drmmode, drmmode_bo *bo);
 
 #endif

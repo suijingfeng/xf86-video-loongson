@@ -1,5 +1,6 @@
 /*
- * Copyright © 2007 Red Hat, Inc.
+ * Copyright (C) 2007 Red Hat, Inc.
+ * Copyright (C) 2022 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,11 +23,11 @@
  *
  * Authors:
  *    Dave Airlie <airlied@redhat.com>
- *
+ *    Sui Jingfeng <suijingfeng@loongson.cn>
  */
 
 #ifdef HAVE_DIX_CONFIG_H
-#include "dix-config.h"
+#include "config.h"
 #endif
 
 #include <errno.h>
@@ -38,6 +39,14 @@
 #include <xf86drm.h>
 
 #include "dumb_bo.h"
+
+struct dumb_bo
+{
+    uint32_t handle;
+    uint32_t size;
+    void *ptr;
+    uint32_t pitch;
+};
 
 struct dumb_bo *dumb_bo_create(int fd,
                                unsigned int width,
@@ -104,6 +113,15 @@ int dumb_bo_map(int fd, struct dumb_bo * const bo)
     return 0;
 }
 
+void dumb_bo_unmap(struct dumb_bo * const bo)
+{
+    if (bo->ptr)
+    {
+        munmap(bo->ptr, bo->size);
+        bo->ptr = NULL;
+    }
+}
+
 int dumb_bo_destroy(int fd, struct dumb_bo * const bo)
 {
     struct drm_mode_destroy_dumb arg;
@@ -125,6 +143,26 @@ int dumb_bo_destroy(int fd, struct dumb_bo * const bo)
 
     free(bo);
     return 0;
+}
+
+uint32_t dumb_bo_pitch(struct dumb_bo * const bo)
+{
+    return bo->pitch;
+}
+
+void *dumb_bo_cpu_addr(struct dumb_bo * const bo)
+{
+    return bo->ptr;
+}
+
+uint32_t dumb_bo_handle(struct dumb_bo * const bo)
+{
+    return bo->handle;
+}
+
+uint32_t dumb_bo_size(struct dumb_bo * const bo)
+{
+    return bo->size;
 }
 
 /* OUTPUT SLAVE SUPPORT */

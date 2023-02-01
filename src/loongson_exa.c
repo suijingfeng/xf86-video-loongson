@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -38,7 +38,6 @@
 #include "driver.h"
 #include "dumb_bo.h"
 
-
 #include "loongson_options.h"
 #include "loongson_pixmap.h"
 #include "loongson_debug.h"
@@ -46,17 +45,22 @@
 
 #include "fake_exa.h"
 #include "etnaviv_exa.h"
-#include "gsgpu_exa.h"
 
-static void print_pixmap(PixmapPtr pPixmap)
+#if HAVE_LIBDRM_GSGPU
+#include "gsgpu_exa.h"
+#endif
+
+void print_pixmap_info(PixmapPtr pPixmap)
 {
+
     xf86Msg(X_INFO, "refcnt: %d\n", pPixmap->refcnt);
     xf86Msg(X_INFO, "devKind: %d\n", pPixmap->devKind);
     xf86Msg(X_INFO, "screen_x: %d\n", pPixmap->screen_x);
     xf86Msg(X_INFO, "screen_y: %d\n", pPixmap->screen_y);
     xf86Msg(X_INFO, "usage hint: %u\n", pPixmap->usage_hint);
 
-    xf86Msg(X_INFO, "raw pixel data: %p\n", pPixmap->devPrivate.ptr);
+    xf86Msg(X_INFO, "location: %p, raw pixel data: %p\n",
+            pPixmap, pPixmap->devPrivate.ptr);
 }
 
 
@@ -79,7 +83,6 @@ struct dumb_bo *dumb_bo_from_pixmap(ScreenPtr pScreen, PixmapPtr pPixmap)
 {
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
 
     if (priv == NULL)
     {
@@ -88,89 +91,70 @@ struct dumb_bo *dumb_bo_from_pixmap(ScreenPtr pScreen, PixmapPtr pPixmap)
         return NULL;
     }
 
-    if (lsp->exaDrvPtr == NULL)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: exaDrvPtr is NULL\n", __func__);
-        return NULL;
-    }
-
-    if (pPixmap)
-        print_pixmap(pPixmap);
-
-    if (LS_IsDumbPixmap(priv->usage_hint) == TRUE)
+    if (priv->gbo)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "%s: priv is dumb\n", __func__);
-    }
-    else
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: is not a dumb\n", __func__);
+                   "%s: priv is backing by GTT\n", __func__);
         return NULL;
     }
 
     return priv->bo;
 }
 
-Bool ls_exa_set_pixmap_bo(ScrnInfoPtr pScrn,
-                          PixmapPtr pPixmap,
-                          struct dumb_bo *bo,
-                          Bool owned)
+Bool loongson_set_pixmap_dumb_bo(ScrnInfoPtr pScrn,
+                                 PixmapPtr pPixmap,
+                                 struct dumb_bo *dbo,
+                                 int usage_hint,
+                                 int prime_fd)
 {
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pPixmap);
     struct LoongsonRec *lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    int prime_fd;
-    int ret;
 
-    if (lsp->exaDrvPtr == NULL)
+    if (priv == NULL)
     {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: exaDrvPtr is NULL\n", __func__);
+                "%s: priv is NULL\n", __func__);
         return FALSE;
     }
+
+    priv->usage_hint = usage_hint;
 
     // destroy old backing memory, and update it with new.
     if (priv->fd > 0)
     {
         close(priv->fd);
+        priv->fd = prime_fd;
     }
 
-    if (priv->owned && priv->bo)
+    if (priv->bo)
     {
-        dumb_bo_destroy(pDrmMode->fd, priv->bo);
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "%s: destroy old backing bo\n", __func__);
+        dumb_bo_destroy(lsp->fd, priv->bo);
     }
 
-    ret = drmPrimeHandleToFD(pDrmMode->fd, bo->handle, DRM_CLOEXEC, &prime_fd);
-    if (ret)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                "%s: failed to get dmabuf fd: %d\n", __func__, ret);
-        return FALSE;
-    }
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "%s: set backing dumb bo of %p: handle: %d, pitch: %d\n",
+               __func__, pPixmap, dumb_bo_handle(dbo) ,dumb_bo_pitch(dbo));
 
-    priv->bo = bo;
-    priv->fd = prime_fd;
-    priv->pitch = bo->pitch;
-    priv->owned = owned;
+    priv->bo = dbo;
+    priv->pitch = dumb_bo_pitch(dbo);
 
-    pPixmap->devPrivate.ptr = NULL;
     pPixmap->devKind = priv->pitch;
 
     return TRUE;
 }
 
-int ms_exa_shareable_fd_from_pixmap(ScreenPtr pScreen,
-                                    PixmapPtr pixmap,
-                                    CARD16 *stride,
-                                    CARD32 *size)
+int loongson_exa_shareable_fd_from_pixmap(ScreenPtr pScreen,
+                                          PixmapPtr pixmap,
+                                          CARD16 *stride,
+                                          CARD32 *size)
 {
     struct exa_pixmap_priv *priv = exaGetPixmapDriverPrivate(pixmap);
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ls = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
 
-    if ((ls->exaDrvPtr == NULL) || (priv == NULL) || (priv->fd == 0))
+    if ((lsp->exaDrvPtr == NULL) || (priv == NULL) || (priv->fd <= 0))
     {
         return -1;
     }
@@ -178,13 +162,9 @@ int ms_exa_shareable_fd_from_pixmap(ScreenPtr pScreen,
     return priv->fd;
 }
 
-
-
-
 /////////////////////////////////////////////////////////////////////////////
-//  EXA governor
+//  EXA driver instance governor
 /////////////////////////////////////////////////////////////////////////////
-
 
 Bool LS_InitExaLayer(ScreenPtr pScreen)
 {
@@ -195,10 +175,9 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
     if (pExaDrv == NULL)
         return FALSE;
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Initializing Fake EXA\n");
-
     if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
     {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Initializing Fake EXA\n");
         if (setup_fake_exa(pScrn, pExaDrv) == FALSE)
         {
             free(pExaDrv);
@@ -206,6 +185,17 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
         }
     }
 
+    if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Initializing software EXA\n");
+        if (setup_fake_exa(pScrn, pExaDrv) == FALSE)
+        {
+            free(pExaDrv);
+            return FALSE;
+        }
+    }
+
+#if HAVE_LIBDRM_ETNAVIV
     if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
     {
         if (etnaviv_setup_exa(pScrn, pExaDrv) == FALSE)
@@ -214,7 +204,9 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
             return FALSE;
         }
     }
+#endif
 
+#if HAVE_LIBDRM_GSGPU
     if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
     {
         if (gsgpu_setup_exa(pScrn, pExaDrv) == FALSE)
@@ -223,6 +215,7 @@ Bool LS_InitExaLayer(ScreenPtr pScreen)
             return FALSE;
         }
     }
+#endif
 
     // exaDriverInit sets up EXA given a driver record filled in by the driver.
     // pScreenInfo should have been allocated by exaDriverAlloc().
@@ -247,7 +240,7 @@ Bool LS_DestroyExaLayer(ScreenPtr pScreen)
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
-    if (lsp->exaDrvPtr != NULL)
+    if (lsp->exaDrvPtr)
     {
         PixmapPtr screen_pixmap = pScreen->GetScreenPixmap(pScreen);
 
@@ -286,9 +279,6 @@ Bool try_enable_exa(ScrnInfoPtr pScrn)
               ((strcmp(accel_method_str, "exa") == 0) ||
                (strcmp(accel_method_str, "EXA") == 0)));
 
-    xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
-               "EXA method: %s\n", accel_method_str);
-
     if (do_exa)
     {
         const char *pExaType2D = NULL;
@@ -313,7 +303,7 @@ Bool try_enable_exa(ScrnInfoPtr pScrn)
             {
                 pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_SOFTWARE;
                 xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
-                    "EXA Acceleration type: software.\n");
+                           "EXA Acceleration type: software.\n");
             }
             else if (strcmp(pExaType2D, "vivante") == 0)
             {
@@ -326,10 +316,18 @@ Bool try_enable_exa(ScrnInfoPtr pScrn)
             else if (strcmp(pExaType2D, "gsgpu") == 0)
             {
                 pDrmMode->exa_acc_type = EXA_ACCEL_TYPE_GSGPU;
+
             }
 
+            pDrmMode->exa_shadow_enabled = xf86ReturnOptValBool(
+                    pDrmMode->Options, OPTION_SHADOW_FB, FALSE);
+
             xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
-                       "EXA enabled, method: %s\n", pExaType2D);
+                       "EXA enabled, acceleraton method: %s\n", pExaType2D);
+
+            if (pDrmMode->exa_shadow_enabled)
+                xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "ShadowFB on EXA enabled\n");
+
             pDrmMode->exa_enabled = TRUE;
             return TRUE;
         }

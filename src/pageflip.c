@@ -1,5 +1,6 @@
 /*
- * Copyright © 2014 Intel Corporation
+ * Copyright (C) 2014 Intel Corporation
+ * Copyright (C) 2022 Loongson Corporation
  *
  * Permission to use, copy, modify, distribute, and sell this software and its
  * documentation for any purpose is hereby granted without fee, provided that
@@ -29,7 +30,8 @@
 
 #include "driver.h"
 #include "vblank.h"
-
+#include "gsgpu_bo_helper.h"
+#include "loongson_scanout.h"
 /*
  * Flush the DRM event queue when full; makes space for new events.
  *
@@ -68,7 +70,6 @@ int ms_flush_drm_events(ScreenPtr pScreen)
     return 1;
 }
 
-#ifdef GLAMOR_HAS_GBM
 
 /*
  * Event data for an in progress flip.
@@ -204,9 +205,12 @@ static Bool queue_flip_on_crtc(ScreenPtr pScreen,
      * completion event. All other crtc's events will be discarded.
      */
 
-     xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%d, %d\n",
-                drmmode_crtc->vblank_pipe, ref_crtc_vblank_pipe);
+    #if defined(DEBUG_PAGE_FLIP)
 
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%d, %d\n",
+               drmmode_crtc->vblank_pipe, ref_crtc_vblank_pipe);
+
+    #endif
 
     flip->on_reference_crtc =
           (drmmode_crtc->vblank_pipe == ref_crtc_vblank_pipe);
@@ -250,8 +254,8 @@ static Bool queue_flip_on_crtc(ScreenPtr pScreen,
 }
 
 
-Bool ms_do_pageflip(ScreenPtr screen,
-                    PixmapPtr new_front,
+Bool ms_do_pageflip(ScreenPtr pScreen,
+                    PixmapPtr pNewFrontPixmap,
                     void *event,
                     int ref_crtc_vblank_pipe,
                     Bool async,
@@ -259,25 +263,25 @@ Bool ms_do_pageflip(ScreenPtr screen,
                     pageflip_abort_cb pAbortCB,
                     const char *log_prefix)
 {
-#ifndef GLAMOR_HAS_GBM
-    return FALSE;
-#else
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(screen);
-    loongsonPtr ls = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ls->drmmode;
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
-    drmmode_bo new_front_bo;
+    struct DrmModeBO front_bo_tmp;
+    struct DrmModeBO *new_front_bo = &front_bo_tmp;
     uint32_t flags;
     int i;
     struct ms_flipdata *flipdata;
 
     if (pDrmMode->glamor_enabled)
     {
-        struct GlamorAPI * const pGlamorAPI = &ls->glamor;
+#ifdef GLAMOR_HAS_GBM
+        struct GlamorAPI * const pGlamorAPI = &lsp->glamor;
 
-        pGlamorAPI->block_handler(screen);
-        new_front_bo.gbm = pGlamorAPI->gbm_bo_from_pixmap(screen, new_front);
-        if (new_front_bo.gbm == NULL)
+        pGlamorAPI->block_handler(pScreen);
+        new_front_bo->gbm = pGlamorAPI->gbm_bo_from_pixmap(pScreen,
+                                                           pNewFrontPixmap);
+        if (new_front_bo->gbm == NULL)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                    "%s: Failed to get GBM BO for flip to new front.\n",
@@ -285,41 +289,65 @@ Bool ms_do_pageflip(ScreenPtr screen,
             return FALSE;
         }
 
-        new_front_bo.dumb = NULL;
+        new_front_bo->dumb = NULL;
+#endif
+    }
+    else if (pDrmMode->exa_enabled &&
+             pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
+    {
+#ifdef HAVE_LIBDRM_GSGPU
+        /*
+         * the backing memory is gtt bo when use x server with window manager
+         */
+        new_front_bo->dumb = dumb_bo_from_pixmap(pScreen, pNewFrontPixmap);
+        if (!new_front_bo->dumb)
+        {
+            new_front_bo->gbo = gsgpu_get_pixmap_bo(pNewFrontPixmap);
+            if (!new_front_bo->gbo)
+            {
+                xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                           "Failed to get backing bo for pageflip\n");
+
+                return FALSE;
+            }
+            new_front_bo->pitch = pNewFrontPixmap->devKind;
+        }
+
+        new_front_bo->gbm = NULL;
+#endif
     }
     else if (pDrmMode->exa_enabled)
     {
         /*
-         * what if the backing memory is not a dumb
+         * what if the backing memory is not a dumb ?
          */
-        new_front_bo.dumb = dumb_bo_from_pixmap(screen, new_front);
-        if (new_front_bo.dumb == NULL)
+        new_front_bo->dumb = dumb_bo_from_pixmap(pScreen, pNewFrontPixmap);
+        if (new_front_bo->dumb == NULL)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                       "exa: Failed to get dumb bo for flip to new front.\n");
+                       "exa: Failed to get dumb bo for flip\n");
             return FALSE;
         }
 
-        new_front_bo.gbm = NULL;
+        new_front_bo->gbm = NULL;
     }
     else
     {
         return FALSE;
     }
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "new front bo prepared\n");
 
     flipdata = calloc(1, sizeof(struct ms_flipdata));
     if (!flipdata)
     {
-        drmmode_bo_destroy(pDrmMode, &new_front_bo);
+        drmmode_bo_destroy(pDrmMode, new_front_bo);
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                    "%s: Failed to allocate flipdata\n", log_prefix);
         return FALSE;
     }
 
     flipdata->event = event;
-    flipdata->screen = screen;
+    flipdata->screen = pScreen;
     flipdata->event_handler = pHandlerCB;
     flipdata->abort_handler = pAbortCB;
 
@@ -335,13 +363,14 @@ Bool ms_do_pageflip(ScreenPtr screen,
     /* Create a new handle for the back buffer */
     flipdata->old_fb_id = pDrmMode->fb_id;
 
-    new_front_bo.width = new_front->drawable.width;
-    new_front_bo.height = new_front->drawable.height;
-    if (drmmode_bo_import(pDrmMode, &new_front_bo, &pDrmMode->fb_id))
+    new_front_bo->width = pNewFrontPixmap->drawable.width;
+    new_front_bo->height = pNewFrontPixmap->drawable.height;
+    if (drmmode_bo_import(pDrmMode, new_front_bo, &pDrmMode->fb_id))
     {
         if (!pDrmMode->flip_bo_import_failed)
         {
-            xf86DrvMsg(pScrn->scrnIndex, X_WARNING, "%s: Import BO failed: %s\n",
+            xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+                       "%s: Import BO failed: %s\n",
                        log_prefix, strerror(errno));
             pDrmMode->flip_bo_import_failed = TRUE;
         }
@@ -350,18 +379,19 @@ Bool ms_do_pageflip(ScreenPtr screen,
     else
     {
         if (pDrmMode->flip_bo_import_failed &&
-            new_front != screen->GetScreenPixmap(screen))
+            pNewFrontPixmap != pScreen->GetScreenPixmap(pScreen))
+        {
             pDrmMode->flip_bo_import_failed = FALSE;
+        }
     }
 
+#if defined(DEBUG_PAGE_FLIP)
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "new front bo fb id: %d\n", pDrmMode->fb_id);
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                      "new front bo fb id: %d\n", pDrmMode->fb_id);
-
-
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                      "old front bo fb id: %d\n", flipdata->old_fb_id);
-
+               "old front bo fb id: %d\n", flipdata->old_fb_id);
+#endif
 
     flags = DRM_MODE_PAGE_FLIP_EVENT;
     if (async)
@@ -378,13 +408,16 @@ Bool ms_do_pageflip(ScreenPtr screen,
      */
     for (i = 0; i < config->num_crtc; i++)
     {
-        xf86CrtcPtr crtc = config->crtc[i];
+        xf86CrtcPtr pCrtc = config->crtc[i];
 
-        if (!ls_is_crtc_on(crtc))
+        if (!ls_is_crtc_on(pCrtc))
             continue;
 
-        if (!queue_flip_on_crtc(screen, crtc, flipdata,
-                                ref_crtc_vblank_pipe, flags))
+        if (!queue_flip_on_crtc(pScreen,
+                                pCrtc,
+                                flipdata,
+                                ref_crtc_vblank_pipe,
+                                flags))
         {
             xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
                        "%s: Queue flip on CRTC %d failed: %s\n",
@@ -393,7 +426,7 @@ Bool ms_do_pageflip(ScreenPtr screen,
         }
     }
 
-    drmmode_bo_destroy(pDrmMode, &new_front_bo);
+    drmmode_bo_destroy(pDrmMode, new_front_bo);
 
     /*
      * Do we have more than our local reference,
@@ -404,9 +437,10 @@ Bool ms_do_pageflip(ScreenPtr screen,
     {
         flipdata->flip_count--;
 
+#if defined(DEBUG_PAGE_FLIP)
         xf86DrvMsg(pScrn->scrnIndex, X_INFO, "flip_count=%d\n",
                                      flipdata->flip_count);
-
+#endif
         return TRUE;
     }
 
@@ -419,14 +453,14 @@ error_undo:
      */
     if (flipdata->flip_count == 1)
     {
-        drmModeRmFB(ls->fd, pDrmMode->fb_id);
+        drmModeRmFB(lsp->fd, pDrmMode->fb_id);
         pDrmMode->fb_id = flipdata->old_fb_id;
     }
 
 error_out:
     xf86DrvMsg(pScrn->scrnIndex, X_WARNING, "Page flip failed: %s\n",
                strerror(errno));
-    drmmode_bo_destroy(pDrmMode, &new_front_bo);
+    drmmode_bo_destroy(pDrmMode, new_front_bo);
     /* if only the local reference - free the structure,
      * else drop the local reference and return */
     if (flipdata->flip_count == 1)
@@ -435,7 +469,4 @@ error_out:
         flipdata->flip_count--;
 
     return FALSE;
-#endif /* GLAMOR_HAS_GBM */
 }
-
-#endif

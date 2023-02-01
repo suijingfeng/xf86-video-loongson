@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -37,46 +37,51 @@
 #include <pciaccess.h>
 #endif
 
-//#define PCI_VENDOR_AMD                0x1022
-//#define PCI_VENDOR_ATI                0x1002
-//#define PCI_CHIP_ID_RX560             0x67ff
-
-#define PCI_VENDOR_LOONGSON             0x0014
-#define PCI_CHIP_ID_7A1000              0x7a06
-#define PCI_CHIP_ID_7A2000              0x7a36
-#define PCI_CHIP_ID_GSGPU               0x7a25
+#include "loongson_pci_devices.h"
 
 // LEMOTE 3A3000 BOARD HAVE 0x00030000
-#define LOONGSON_DEVICE_MATCH_V1                   \
-    {                                              \
-        PCI_VENDOR_LOONGSON, PCI_CHIP_ID_7A1000,   \
-        PCI_MATCH_ANY, PCI_MATCH_ANY,              \
-        0x00030000, 0x00ffff00, 0                  \
+#define LOONGSON_DEVICE_MATCH_V1                     \
+    {                                                \
+        PCI_VENDOR_LOONGSON, PCI_DEVICE_ID_7A1000,   \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,                \
+        0x00030000, 0x00ffff00, 0                    \
     }
 
 // 3A4000 DEV & ENVALUE BOARD HAVE 0x00038000
-#define LOONGSON_DEVICE_MATCH_V2                   \
-    {                                              \
-        PCI_VENDOR_LOONGSON, PCI_CHIP_ID_7A1000,   \
-        PCI_MATCH_ANY, PCI_MATCH_ANY,              \
-        0x00038000, 0x00ffff00, 0                  \
+#define LOONGSON_DEVICE_MATCH_V2                     \
+    {                                                \
+        PCI_VENDOR_LOONGSON, PCI_DEVICE_ID_7A1000,   \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,                \
+        0x00038000, 0x00ffff00, 0                    \
     }
 
-#define LOONGSON_DEVICE_MATCH_DC_IN_7A2000         \
-    {                                              \
-        PCI_VENDOR_LOONGSON, PCI_CHIP_ID_7A2000,   \
-        PCI_MATCH_ANY, PCI_MATCH_ANY,              \
-        0x00030000, 0x00ffff00, 0                  \
+#define LOONGSON_DEVICE_MATCH_DC_IN_7A2000           \
+    {                                                \
+        PCI_VENDOR_LOONGSON, PCI_DEVICE_ID_7A2000,   \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,                \
+        0x00030000, 0x00ffff00, 0                    \
     }
 
-#define LOONGSON_DEVICE_MATCH_GSGPU                \
-    {                                              \
-        PCI_VENDOR_LOONGSON, PCI_CHIP_ID_GSGPU,    \
-        PCI_MATCH_ANY, PCI_MATCH_ANY,              \
-        0x00040000, 0x00ffff00, 0                  \
+#define LOONGSON_DEVICE_MATCH_GSGPU_040000           \
+    {                                                \
+        PCI_VENDOR_LOONGSON, PCI_DEVICE_ID_GSGPU,    \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,                \
+        0x00040000, 0x00ffff00, 0                    \
     }
 
+#define LOONGSON_DEVICE_MATCH_GSGPU_038000           \
+    {                                                \
+        PCI_VENDOR_LOONGSON, PCI_DEVICE_ID_GSGPU,    \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,                \
+        0x00038000, 0x00ffff00, 0                    \
+    }
 
+#define LOONGSON_DEVICE_MATCH_GSGPU_030200           \
+    {                                                \
+        PCI_VENDOR_LOONGSON, PCI_DEVICE_ID_GSGPU,    \
+        PCI_MATCH_ANY, PCI_MATCH_ANY,                \
+        0x00030200, 0x00ffff00, 0                    \
+    }
 
 // glamor developing on amdgpu rx560...
 /*

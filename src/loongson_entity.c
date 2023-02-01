@@ -57,26 +57,24 @@ struct loongsonEntRec
     unsigned int assigned_crtcs;
 };
 
+static int loongson_entity_index = -1;
 
-
-static int ls_entity_index = -1;
-
-void LS_SetupEntity(ScrnInfoPtr scrn, int entity_num)
+void LS_SetupEntity(ScrnInfoPtr pScrn, int entity_num)
 {
     DevUnion *pPriv = NULL;
 
     xf86SetEntitySharable(entity_num);
 
-    if (ls_entity_index == -1)
+    if (loongson_entity_index == -1)
     {
-        ls_entity_index = xf86AllocateEntityPrivateIndex();
+        loongson_entity_index = xf86AllocateEntityPrivateIndex();
     }
 
-    pPriv = xf86GetEntityPrivate(entity_num, ls_entity_index);
+    pPriv = xf86GetEntityPrivate(entity_num, loongson_entity_index);
     // suijingfeng: pPriv is actually following type.
-    // pPriv = &(xf86Entities[entity_num]->entityPrivates[ls_entity_index]);
+    // pPriv = &(xf86Entities[entity_num]->entityPrivates[loongson_entity_index]);
 
-    xf86SetEntityInstanceForScreen(scrn, entity_num,
+    xf86SetEntityInstanceForScreen(pScrn, entity_num,
         xf86GetNumEntityInstances(entity_num) - 1);
 
     if (NULL == pPriv->ptr)
@@ -84,22 +82,19 @@ void LS_SetupEntity(ScrnInfoPtr scrn, int entity_num)
         pPriv->ptr = xnfcalloc(sizeof(struct loongsonEntRec), 1);
     }
 
-    xf86DrvMsg(scrn->scrnIndex, X_INFO,
-            "Setup entity: entity_num=%d, entity_index=%d\n",
-            entity_num, ls_entity_index);
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "Setup entity: entity_num=%d, entity_index=%d\n",
+               entity_num, loongson_entity_index);
 }
 
-// TODO: replace modesettingPTR with loongsonPTR
-//
-static struct loongsonEntRec * LS_GetPrivEntity(ScrnInfoPtr pScrn)
+static struct loongsonEntRec *LS_GetPrivEntity(ScrnInfoPtr pScrn)
 {
-    DevUnion *pPriv;
     loongsonPtr lsp = loongsonPTR(pScrn);
+    DevUnion *pPriv;
 
-    pPriv = xf86GetEntityPrivate(lsp->pEnt->index, ls_entity_index);
+    pPriv = xf86GetEntityPrivate(lsp->pEnt->index, loongson_entity_index);
     return pPriv->ptr;
 }
-
 
 int LS_EntityIncreaseFdReference(ScrnInfoPtr pScrn)
 {
@@ -109,7 +104,6 @@ int LS_EntityIncreaseFdReference(ScrnInfoPtr pScrn)
 
     return pLsEnt->fd_ref;
 }
-
 
 int LS_EntityDecreaseFdReference(ScrnInfoPtr pScrn)
 {
@@ -126,14 +120,12 @@ int LS_EntityDecreaseFdReference(ScrnInfoPtr pScrn)
     return pLsEnt->fd_ref;
 }
 
-
 int LS_EntityGetCachedFd(ScrnInfoPtr scrn)
 {
     struct loongsonEntRec * const pLsEnt = LS_GetPrivEntity(scrn);
 
     return pLsEnt->fd;
 }
-
 
 void LS_EntityInitFd(ScrnInfoPtr pScrn, int fd)
 {
@@ -146,9 +138,7 @@ void LS_EntityInitFd(ScrnInfoPtr pScrn, int fd)
         "Init Entity: Caching fd(=%d) and set its rederence to 1.\n", fd);
 }
 
-
 // CRTC Related
-
 void LS_MarkCrtcInUse(ScrnInfoPtr pScrn, int num)
 {
     struct loongsonEntRec * const pLsEnt = LS_GetPrivEntity(pScrn);
@@ -157,16 +147,14 @@ void LS_MarkCrtcInUse(ScrnInfoPtr pScrn, int num)
     pLsEnt->assigned_crtcs |= (1 << num);
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "CRTC%d is in use on this screen\n", num);
+               "CRTC-%d is in use on this screen\n", num);
 }
-
 
 unsigned int LS_GetAssignedCrtc(ScrnInfoPtr pScrn)
 {
     struct loongsonEntRec * const pLsEnt = LS_GetPrivEntity(pScrn);
     return pLsEnt->assigned_crtcs;
 }
-
 
 void LS_EntityClearAssignedCrtc(ScrnInfoPtr pScrn)
 {
@@ -176,15 +164,12 @@ void LS_EntityClearAssignedCrtc(ScrnInfoPtr pScrn)
     pLsEnt->assigned_crtcs = 0;
 }
 
-
-//// ugly
 unsigned long LS_EntityGetFd_wakeup(ScrnInfoPtr scrn)
 {
     struct loongsonEntRec * const pLsEnt = LS_GetPrivEntity(scrn);
 
     return pLsEnt->fd_wakeup_registered;
 }
-
 
 void LS_EntityInitFd_wakeup(ScrnInfoPtr pScrn, unsigned long serverGen)
 {
@@ -197,13 +182,10 @@ void LS_EntityInitFd_wakeup(ScrnInfoPtr pScrn, unsigned long serverGen)
                                          __func__, serverGen);
 }
 
-
-
 int LS_EntityIncRef_weakeup(ScrnInfoPtr pScrn)
 {
     struct loongsonEntRec * const pLsEnt = LS_GetPrivEntity(pScrn);
     ++pLsEnt->fd_wakeup_ref;
-
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s: %d, fd_wakeup_ref=%d\n",
                                  __func__, __LINE__, pLsEnt->fd_wakeup_ref);

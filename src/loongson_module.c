@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -38,28 +38,24 @@
 #endif
 
 #include "driver.h"
-
 #include "loongson_options.h"
 #include "loongson_entity.h"
 #include "loongson_probe.h"
 
-static void Identify(int flags);
-static Bool DriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data);
-
-
 static SymTabRec Chipsets[] =
 {
-        {0, "loongson-drm"},
-        {1, "lsdc"},
-        {2, "gsgpu"},
-	{-1, NULL}
+    {0, "ls7a1000"},
+    {1, "ls7a2000"},
+    {2, "ls2k1000"},
+    {3, "ls2k0500"},
+    {4, "ls2k2000"},
+    {-1, NULL}
 };
 
 static void Identify(int flags)
 {
-    xf86PrintChipsets("loongson", "Userspace driver for Kernel Drivers", Chipsets);
+    xf86PrintChipsets("loongson", "Xorg driver for Loongson(R) Integrated Graphics Chipsets", Chipsets);
 }
-
 
 static Bool DriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
 {
@@ -86,11 +82,13 @@ static Bool DriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
 }
 
 static const struct pci_id_match loongson_device_match[] = {
-        LOONGSON_DEVICE_MATCH_V1 ,
-        LOONGSON_DEVICE_MATCH_V2 ,
-        LOONGSON_DEVICE_MATCH_DC_IN_7A2000 ,
-        LOONGSON_DEVICE_MATCH_GSGPU ,
-	{0, 0, 0},
+    LOONGSON_DEVICE_MATCH_V1 ,
+    LOONGSON_DEVICE_MATCH_V2 ,
+    LOONGSON_DEVICE_MATCH_DC_IN_7A2000 ,
+    LOONGSON_DEVICE_MATCH_GSGPU_040000 ,
+    LOONGSON_DEVICE_MATCH_GSGPU_038000 ,    /* GSGPU IN LS7A2000 */
+    LOONGSON_DEVICE_MATCH_GSGPU_030200 ,    /* GSGPU IN LS2K2000 */
+    {0, 0, 0},
 };
 
 static MODULESETUPPROTO(fnSetup);
@@ -110,10 +108,6 @@ static XF86ModuleVersionInfo VersRec = {
     {0, 0, 0, 0}
 };
 
-
-//
-// suijingfeng: I_ means Interface
-//
 _X_EXPORT DriverRec I_LoongsonDrv = {
     .driverVersion = 1,
     .driverName = "loongson",
@@ -130,13 +124,11 @@ _X_EXPORT DriverRec I_LoongsonDrv = {
 #endif
 };
 
-
-static void * fnSetup(void *module, void *opts, int *errmaj, int *errmin)
+static void *fnSetup(void *module, void *opts, int *errmaj, int *errmin)
 {
     static Bool setupDone = FALSE;
 
-    /* This module should be loaded only once, but check to be sure.
-     */
+    /* This module should be loaded only once, but check to be sure. */
     if (!setupDone)
     {
         setupDone = TRUE;

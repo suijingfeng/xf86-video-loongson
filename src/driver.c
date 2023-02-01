@@ -1,6 +1,8 @@
 /*
  * Copyright 2008 Tungsten Graphics, Inc., Cedar Park, Texas.
  * Copyright 2011 Dave Airlie
+ * Copyright 2022 Loongson Corporation
+ *
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -47,7 +49,6 @@
 
 #include <X11/extensions/randr.h>
 
-
 #ifdef XSERVER_PLATFORM_BUS
 #include <xf86platformBus.h>
 #endif
@@ -56,6 +57,7 @@
 #endif
 #include "driver.h"
 
+#include "loongson_pci_devices.h"
 #include "loongson_options.h"
 #include "loongson_debug.h"
 #include "loongson_helpers.h"
@@ -67,11 +69,32 @@
 #include "loongson_scanout.h"
 #include "loongson_prime.h"
 #include "loongson_randr.h"
-
+#include "loongson_buffer.h"
+#include "loongson_damage.h"
 #include "sprite.h"
-#include "lsdc_dri3.h"
-#include "etnaviv_dri3.h"
+#include "loongson_dri3.h"
+#include "loongson_pixmap.h"
+#include "loongson_modeset.h"
+#include "loongson_blt.h"
+#include "loongson_dri2.h"
+
+#if HAVE_LIBDRM_GSGPU
+#include "gsgpu_dri2.h"
+#include "gsgpu_device.h"
 #include "gsgpu_dri3.h"
+#endif
+
+#if HAVE_LIBDRM_ETNAVIV
+#include "etnaviv_dri3.h"
+#endif
+
+
+#if HAVE_DOT_GIT
+#include "git_version.h"
+#else
+#define git_version "not compiled from git"
+#endif
+
 
 static Bool PreInit(ScrnInfoPtr pScrn, int flags);
 static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv);
@@ -214,14 +237,7 @@ static void ls_dirty_update(ScreenPtr pScreen, int *timeout)
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-
     PixmapDirtyUpdatePtr ent;
-
-    /* dirty pixmaps is tracked in the server */
-    if (xorg_list_is_empty(&pScreen->pixmap_dirty_list))
-    {
-        return;
-    }
 
     xorg_list_for_each_entry(ent, &pScreen->pixmap_dirty_list, ent)
     {
@@ -260,6 +276,7 @@ static void msBlockHandler(ScreenPtr pScreen, void *timeout)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
     pScreen->BlockHandler = lsp->BlockHandler;
     pScreen->BlockHandler(pScreen, timeout);
@@ -272,14 +289,26 @@ static void msBlockHandler(ScreenPtr pScreen, void *timeout)
                    "%s IS GPU, dispatch dirty\n", __func__);
         LS_DispatchSlaveDirty(pScreen);
     }
+/*
     else if (lsp->dirty_enabled)
     {
-        xf86DrvMsg(X_INFO, pScrn->scrnIndex,
-                   "%s: dispatch dirty\n", __func__);
-        LS_DispatchDirty(pScreen);
+        if (!pDrmMode->exa_shadow_enabled)
+        {
+            // Workaround: this is not required when exa+shadowfb is enabled
+            LS_DispatchDirty(pScreen);
+        }
     }
+*/
+    if (pDrmMode->exa_shadow_enabled)
+        loongson_dispatch_dirty(pScreen);
 
-    ls_dirty_update(pScreen, timeout);
+    if (!xorg_list_is_empty(&pScreen->pixmap_dirty_list))
+    {
+        xf86DrvMsg(X_INFO, pScrn->scrnIndex,
+                   "pixmap_dirty_list is not empty\n");
+
+        ls_dirty_update(pScreen, timeout);
+    }
 }
 
 
@@ -296,14 +325,14 @@ static void msBlockHandler(ScreenPtr pScreen, void *timeout)
 static void LS_BlockHandler_Oneshot(ScreenPtr pScreen, void *pTimeout)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ls = loongsonPTR(pScrn);
-    struct drmmode_rec *pDrmMode = &ls->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec *pDrmMode = &lsp->drmmode;
 
     xf86Msg(X_INFO, "%s begin\n", __func__);
 
     msBlockHandler(pScreen, pTimeout);
 
-    drmmode_set_desired_modes(pScrn, pDrmMode, TRUE);
+    loongson_set_desired_modes(pScrn, pDrmMode, TRUE);
 
     xf86Msg(X_INFO, "%s finished\n", __func__);
 }
@@ -311,28 +340,23 @@ static void LS_BlockHandler_Oneshot(ScreenPtr pScreen, void *pTimeout)
 
 static void FreeRec(ScrnInfoPtr pScrn)
 {
-    loongsonPtr ms;
-    struct drmmode_rec * pDrmMode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec *pDrmMode = &lsp->drmmode;
     BusRec * pBusLoc;
 
-    ms = loongsonPTR(pScrn);
-    if (!ms)
-        return;
+    pBusLoc = &lsp->pEnt->location;
 
-    pDrmMode = &ms->drmmode;
-    pBusLoc = &ms->pEnt->location;
-
-    if (ms->fd > 0)
+    if (lsp->fd > 0)
     {
         if (0 == LS_EntityDecreaseFdReference(pScrn))
         {
             int ret;
             if (pBusLoc->type == BUS_PCI)
             {
-                ret = drmClose(ms->fd);
+                ret = drmClose(lsp->fd);
                 xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                   "PCI: Close file descriptor %d %s.\n",
-                   ms->fd, ret ? "failed" : "successful");
+                           "PCI: Close file descriptor %d %s.\n",
+                           lsp->fd, ret ? "failed" : "successful");
             }
             else
             {
@@ -346,11 +370,11 @@ static void FreeRec(ScrnInfoPtr pScrn)
                 else
 #endif
                 {
-                    ret = close(ms->fd);
+                    ret = close(lsp->fd);
 
                     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
                         "Platform: Close file descriptor %d %s.\n",
-                        ms->fd, ret ? "failed" : "successful");
+                        lsp->fd, ret ? "failed" : "successful");
                 }
             }
         }
@@ -359,7 +383,7 @@ static void FreeRec(ScrnInfoPtr pScrn)
     pScrn->driverPrivate = NULL;
 
     LS_FreeOptions(pScrn, &pDrmMode->Options);
-    free(ms);
+    free(lsp);
 }
 
 
@@ -460,15 +484,45 @@ static Bool LS_GetDrmMasterFd(ScrnInfoPtr pScrn)
 }
 
 
+/*
+ * loongson-drm, lsdc, gsgpu can create 32bpp framebuffer,
+ * this is guaranteed, no need to workaround
+ */
+static void loongson_get_default_bpp(ScrnInfoPtr pScrn,
+                                     int drmfd,
+                                     int *depth,
+                                     int *bpp)
+{
+    uint64_t value;
+    int ret;
+
+    /* 16 is fine */
+    ret = drmGetCap(drmfd, DRM_CAP_DUMB_PREFERRED_DEPTH, &value);
+    if (!ret && (value == 16 || value == 8))
+    {
+        *depth = value;
+        *bpp = value;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "kernel prefer bpp: %ld\n", value);
+        return;
+    }
+
+    *depth = 24;
+    *bpp = 32;
+
+    return;
+}
+
+
 /* This is called by PreInit to set up the default visual */
 static Bool InitDefaultVisual(ScrnInfoPtr pScrn)
 {
-    loongsonPtr ms = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
     int defaultdepth, defaultbpp;
     int bppflags;
 
-    drmmode_get_default_bpp(pScrn, pDrmMode, &defaultdepth, &defaultbpp);
+    loongson_get_default_bpp(pScrn, pDrmMode->fd, &defaultdepth, &defaultbpp);
 
     //
     // By default, a 24bpp screen will use 32bpp images, this avoids
@@ -479,7 +533,7 @@ static Bool InitDefaultVisual(ScrnInfoPtr pScrn)
 
     if ((defaultdepth == 24) && (defaultbpp == 24))
     {
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                 "24bpp hw front buffer is not supported\n");
     }
     else
@@ -531,10 +585,13 @@ static Bool InitDefaultVisual(ScrnInfoPtr pScrn)
     return TRUE;
 }
 
-static void LS_ProbeKMS(ScrnInfoPtr pScrn,
+static void LS_ProbeGPU(ScrnInfoPtr pScrn,
                         struct drmmode_rec * const pDrmMode)
 {
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    const char * const galcore = "/dev/galcore";
     drmVersionPtr version;
+    int gpu_fd;
 
     version = drmGetVersion(pDrmMode->fd);
 
@@ -546,61 +603,81 @@ static void LS_ProbeKMS(ScrnInfoPtr pScrn,
                     version->version_major,
                     version->version_minor,
                     version->version_patchlevel);
-        xf86Msg(X_INFO,"  Name: %s\n", version->name);
-        xf86Msg(X_INFO,"  Date: %s\n", version->date);
-        xf86Msg(X_INFO,"  Description: %s\n", version->desc);
+        xf86Msg(X_INFO," Name: %s\n", version->name);
+        xf86Msg(X_INFO," Date: %s\n", version->date);
+        xf86Msg(X_INFO," Description: %s\n", version->desc);
 
         if (!strncmp("lsdc", version->name, version->name_len))
         {
-            pDrmMode->is_lsdc = TRUE;
+            lsp->is_lsdc = TRUE;
+            lsp->is_loongson_drm = FALSE;
+            lsp->is_gsgpu = FALSE;
         }
-        else if (!strncmp("20190831", version->date, version->date_len))
+        else if (!strncmp("loongson-drm", version->name, version->name_len))
         {
-            pDrmMode->is_lsdc = TRUE;
+            lsp->is_lsdc = FALSE;
+            lsp->is_loongson_drm = TRUE;
+            lsp->is_gsgpu = FALSE;
         }
+#if HAVE_LIBDRM_GSGPU
+        else if (!strncmp("gsgpu", version->name, version->name_len))
+        {
+            lsp->is_gsgpu = TRUE;
+            lsp->is_lsdc = FALSE;
+            lsp->is_loongson_drm = FALSE;
+        }
+#endif
         else
         {
-            pDrmMode->is_lsdc = FALSE;
+            xf86Msg(X_INFO,"Unknown Kernel Space Drm Driver\n");
+            lsp->is_lsdc = FALSE;
+            lsp->is_loongson_drm = FALSE;
+            lsp->is_gsgpu = FALSE;
         }
 
         drmFreeVersion(version);
 
-        xf86Msg(X_INFO,"  Is lsdc: %s\n",
-                      pDrmMode->is_lsdc ? "Yes" : "no");
+        xf86Msg(X_INFO, " Is lsdc: %s\n", lsp->is_lsdc ? "Yes" : "no");
+        xf86Msg(X_INFO, " Is loongson-drm: %s\n", lsp->is_loongson_drm ? "Yes" : "no");
+        xf86Msg(X_INFO, " Is gsgpu: %s\n", lsp->is_gsgpu ? "Yes" : "no");
         xf86Msg(X_INFO,"\n");
     }
-}
 
-static void LS_ProbeGPU(ScrnInfoPtr pScrn,
-                        struct drmmode_rec * const pDrmMode)
-{
-    const char * const vivante_gpu_dev = "/dev/galcore";
+    if (lsp->is_gsgpu == FALSE)
+    {
+        gpu_fd = drmOpenWithType("etnaviv", NULL, DRM_NODE_RENDER);
+        if (gpu_fd > 0)
+        {
+            lsp->has_etnaviv = TRUE;
+            drmClose(gpu_fd);
+        }
 
-    if (access(vivante_gpu_dev, F_OK) == 0)
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                        "%s: %s is exist\n",
-                        __func__, vivante_gpu_dev);
-    }
-    else
-    {
-        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                        "%s: %s is NOT exist\n",
-                        __func__, vivante_gpu_dev);
+        xf86Msg(X_INFO, " Is etnaviv kernel driver exist: %s\n",
+                lsp->has_etnaviv ? "Yes" : "no");
+
+        if (lsp->has_etnaviv != TRUE)
+        {
+            if (access(galcore, F_OK) == 0)
+            {
+                xf86Msg(X_INFO, "%s: %s is exist\n", __func__, galcore);
+            }
+        }
     }
 }
 
 static Bool PreInit(ScrnInfoPtr pScrn, int flags)
 {
-    loongsonPtr ms;
-    struct drmmode_rec * pDrmMode;
     uint64_t value = 0;
-    int ret;
-    int connector_count;
     Bool is_prime_supported = FALSE;
+    loongsonPtr lsp;
+    struct drmmode_rec *pDrmMode;
+    struct pci_device *pPciInfo;
+    int connector_count;
+    int ret;
 
     xf86Msg(X_INFO, "\n");
     xf86Msg(X_INFO, "-------- %s started --------\n", __func__);
+    xf86Msg(X_INFO," %s git: %s\n", PACKAGE, git_version);
 
     if (pScrn->numEntities != 1)
     {
@@ -623,7 +700,9 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
         return FALSE;
     }
 
-    ms = loongsonPTR(pScrn);
+    lsp = loongsonPTR(pScrn);
+
+    loongson_init_blitter();
 
     // This function hands information from the EntityRec struct to
     // the drivers. The EntityRec structure itself remains invisible
@@ -632,9 +711,8 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
                "Entity ID = %d\n", pScrn->entityList[0]);
 
-    ms->pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
-    pDrmMode = &ms->drmmode;
-
+    lsp->pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
+    pDrmMode = &lsp->drmmode;
     pDrmMode->is_secondary = FALSE;
     pScrn->displayWidth = 640;  /* default it */
 
@@ -667,6 +745,38 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
         }
     }
 
+    pPciInfo = xf86GetPciInfoForEntity(lsp->pEnt->index);
+
+    if (pPciInfo)
+    {
+        lsp->PciInfo = pPciInfo;
+
+        lsp->vendor_id = pPciInfo->vendor_id;
+        lsp->device_id = pPciInfo->device_id;
+        lsp->revision = pPciInfo->revision;
+
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "Vendor ID = %x\n", lsp->vendor_id);
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "Device ID = %x\n", lsp->device_id);
+
+        if (lsp->device_id == PCI_DEVICE_ID_7A1000)
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                       "I'm the DC in LS7A1000, Revision: %x\n", lsp->revision);
+        }
+        else if (lsp->device_id == PCI_DEVICE_ID_7A2000)
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                       "I'm the DC in LS7A2000, Revision: %x\n", lsp->revision);
+        }
+        else if (lsp->device_id == PCI_DEVICE_ID_GSGPU)
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                       "I'm the LoongGPU, Revision: %x\n", lsp->revision);
+        }
+    }
+
     pScrn->monitor = pScrn->confScreen->monitor;
     pScrn->progClock = TRUE;
     pScrn->rgbBits = 8;
@@ -676,18 +786,29 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
         return FALSE;
     }
 
-    pDrmMode->fd = ms->fd;
+    pDrmMode->fd = lsp->fd;
 
-    if (!LS_CheckOutputs(ms->fd, &connector_count))
+    if (!LS_CheckOutputs(lsp->fd, &connector_count))
     {
         return FALSE;
     }
 
     /* get kernel driver name */
-    LS_ProbeKMS(pScrn, pDrmMode);
-
-    /*  Vivante or Etnaviv ? */
     LS_ProbeGPU(pScrn, pDrmMode);
+
+#if HAVE_LIBDRM_GSGPU
+    if (lsp->is_gsgpu)
+    {
+        gsgpu_device_init(pScrn);
+    }
+#endif
+
+#if HAVE_LIBDRM_ETNAVIV
+    if (lsp->is_loongson_drm &&lsp->has_etnaviv)
+    {
+        etnaviv_device_init(pScrn);
+    }
+#endif
 
     InitDefaultVisual(pScrn);
 
@@ -698,17 +819,17 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
 
     LS_PrepareDebug(pScrn);
 
-    is_prime_supported = LS_CheckPrime(ms->fd);
+    is_prime_supported = LS_CheckPrime(lsp->fd);
 
     // first try glamor, then try EXA
     // if both failed, using the shadowfb
-    if (1 || try_enable_glamor(pScrn) == FALSE)
+    if (try_enable_glamor(pScrn) == FALSE)
     {
         // if prime is not supported by the kms, fallback to shadow.
         if (is_prime_supported)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-                "DRM PRIME is supported, trying fake EXA + DRI3.\n");
+                "DRM PRIME is supported\n");
 
             pDrmMode->exa_enabled = try_enable_exa(pScrn);
         }
@@ -717,7 +838,7 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
             pDrmMode->exa_enabled = try_enable_exa(pScrn);
 
             xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-                "DRM PRIME is NOT supported, try EXA with no prime.\n");
+                "DRM PRIME is NOT supported\n");
         }
     }
 
@@ -780,28 +901,30 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
 #endif
     }
 
+    lsp->is_prime_supported = is_prime_supported;
+
     if (xf86ReturnOptValBool(pDrmMode->Options, OPTION_ATOMIC, FALSE))
     {
-        ret = drmSetClientCap(ms->fd, DRM_CLIENT_CAP_ATOMIC, 1);
-        ms->atomic_modeset = (ret == 0);
+        ret = drmSetClientCap(lsp->fd, DRM_CLIENT_CAP_ATOMIC, 1);
+        lsp->atomic_modeset = (ret == 0);
     }
     else
     {
-        ms->atomic_modeset = FALSE;
+        lsp->atomic_modeset = FALSE;
     }
 
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-        "Atomic modeset enabled ? %s.\n",
-            ms->atomic_modeset ? "YES" : "NO" );
+               "Atomic modeset enabled ? %s.\n",
+                lsp->atomic_modeset ? "YES" : "NO" );
 
-    ms->kms_has_modifiers = FALSE;
-    ret = drmGetCap(ms->fd, DRM_CAP_ADDFB2_MODIFIERS, &value);
+    lsp->kms_has_modifiers = FALSE;
+    ret = drmGetCap(lsp->fd, DRM_CAP_ADDFB2_MODIFIERS, &value);
     if (ret == 0 && value != 0)
     {
-        ms->kms_has_modifiers = TRUE;
+        lsp->kms_has_modifiers = TRUE;
     }
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, ms->kms_has_modifiers ?
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, lsp->kms_has_modifiers ?
         "KMS has modifier support.\n" : "KMS doesn't have modifier support\n");
 
     if (drmmode_pre_init(pScrn, pDrmMode, pScrn->bitsPerPixel / 8) == FALSE)
@@ -838,7 +961,6 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
     {
         LS_ShadowLoadAPI(pScrn);
     }
-
 
     xf86Msg(X_INFO, "-------- %s finished --------\n", __func__);
     xf86Msg(X_INFO, "\n");
@@ -928,27 +1050,31 @@ static Bool msStopFlippingPixmapTracking(DrawablePtr src,
     return ret;
 }
 
-
+/*
+ * Adjust the screen pixmap for the current location of the front buffer.
+ * This is done at EnterVT when buffers are bound as long as the resources
+ * have already been created, but the first EnterVT happens before
+ * CreateScreenResources.
+ */
 static Bool LS_CreateScreenResources(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    struct DrmModeBO * const pFront = pDrmMode->front_bo;
     void *pixels = NULL;
-
-    PixmapPtr rootPixmap;
+    PixmapPtr pRootPixmap;
     Bool ret;
     int err;
 
     xf86Msg(X_INFO, "\n");
-
     xf86Msg(X_INFO, "-------- %s stated --------\n", __func__);
 
     pScreen->CreateScreenResources = lsp->createScreenResources;
     ret = pScreen->CreateScreenResources(pScreen);
     pScreen->CreateScreenResources = LS_CreateScreenResources;
 
-    if (!drmmode_set_desired_modes(pScrn, pDrmMode, pScrn->is_gpu))
+    if (!loongson_set_desired_modes(pScrn, pDrmMode, pScrn->is_gpu))
     {
         return FALSE;
     }
@@ -956,7 +1082,7 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
 #ifdef GLAMOR_HAS_GBM
     if (pDrmMode->glamor_enabled)
     {
-        if (!ls_glamor_handle_new_screen_pixmap(pScrn, &pDrmMode->front_bo))
+        if (!ls_glamor_handle_new_screen_pixmap(pScrn, pFront))
         {
             return FALSE;
         }
@@ -969,32 +1095,24 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
     {
         LS_MapCursorBO(pScrn, pDrmMode);
         xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-            "Hardware cursor enabled, mapping it.\n");
+                   "Hardware cursor enabled, mapping it\n");
     }
 
-    if (pDrmMode->gbm == NULL)
+    if (pFront->dumb)
     {
-        pixels = LS_MapFrontBO(pScrn, pDrmMode);
-        if (pixels == NULL)
+        pixels = LS_MapFrontBO(pScrn, lsp->fd, pFront);
+        if (!pixels)
         {
             return FALSE;
         }
     }
 
-    rootPixmap = pScreen->GetScreenPixmap(pScreen);
-
-    if (pDrmMode->shadow_enable)
+    if (pDrmMode->shadow_enable || pDrmMode->exa_shadow_enabled)
     {
         pixels = pDrmMode->shadow_fb;
     }
 
-    if (pDrmMode->shadow_enable2)
-    {
-        LS_ShadowAllocFB(pScrn, &pDrmMode->shadow_fb2);
-    }
-
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-            "Virtual Address of the front bo: %p\n", pixels);
+    pRootPixmap = pScreen->GetScreenPixmap(pScreen);
 
     // Recall the comment of of miCreateScreenResources()
     // create a pixmap with no data, then redirect it to point to the screen".
@@ -1024,9 +1142,32 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
     //
     // pixels is assumed to be the pixmap data; it will be stored in an
     // implementation-dependent place (usually pPixmap->devPrivate.ptr).
-    if (!pScreen->ModifyPixmapHeader(rootPixmap, -1, -1, -1, -1, -1, pixels))
+
+    if (pDrmMode->exa_enabled)
     {
-        FatalError("Couldn't adjust screen pixmap\n");
+        loongson_set_pixmap_dumb_bo(pScrn,
+                                    pRootPixmap,
+                                    pFront->dumb,
+                                    CREATE_PIXMAP_USAGE_SCANOUT,
+                                    -1);
+
+        if (!pScreen->ModifyPixmapHeader(pRootPixmap,
+                    -1, -1, -1, -1, dumb_bo_pitch(pFront->dumb), pixels))
+        {
+                FatalError("Couldn't adjust screen pixmap\n");
+        }
+    }
+    else
+    {
+        int pitch = -1;
+
+        if (pFront->dumb)
+            pitch = dumb_bo_pitch(pFront->dumb);
+        if (!pScreen->ModifyPixmapHeader(pRootPixmap,
+                -1, -1, -1, -1, pitch, pixels))
+        {
+            FatalError("Couldn't adjust screen pixmap\n");
+        }
     }
 
     if (pDrmMode->shadow_enable)
@@ -1034,7 +1175,7 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
         struct ShadowAPI *pShadowAPI = &lsp->shadow;
 
         pShadowAPI->Add(pScreen,
-                        rootPixmap,
+                        pRootPixmap,
                         LS_ShadowUpdatePacked,
                         LS_ShadowWindow, 0, NULL);
 
@@ -1045,25 +1186,19 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
 
     if ((err != -EINVAL) && (err != -ENOSYS))
     {
-        lsp->damage = DamageCreate(NULL, NULL, DamageReportNone, TRUE,
-                                  pScreen, rootPixmap);
-        if (lsp->damage)
-        {
-            DamageRegister(&rootPixmap->drawable, lsp->damage);
-            lsp->dirty_enabled = TRUE;
-            xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Damage tracking initialized\n");
-        }
-        else
+        lsp->damage = loongson_damage_create(pScreen, pRootPixmap);
+        if (!lsp->damage)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                        "Failed to create screen damage record\n");
             return FALSE;
         }
+        lsp->dirty_enabled = TRUE;
     }
     else
     {
         xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-                       "[drm] dirty fb failed: %d\n", err);
+                   "[drm] dirty fb failed: %d\n", err);
     }
 
     LS_InitRandR(pScreen);
@@ -1075,35 +1210,41 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
 }
 
 
-static Bool msRequestSharedPixmapNotifyDamage(PixmapPtr pPix)
+static Bool LS_RequestSharedPixmapNotifyDamage(PixmapPtr pPixman)
 {
-    ScreenPtr pScreen = pPix->drawable.pScreen;
+    ScreenPtr pScreen = pPixman->drawable.pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    msPixmapPrivPtr ppriv;
 
-    msPixmapPrivPtr ppriv = msGetPixmapPriv(pDrmMode, pPix->master_pixmap);
+    TRACE_ENTER();
+
+    ppriv = msGetPixmapPriv(pDrmMode, pPixman->master_pixmap);
 
     ppriv->notify_on_damage = TRUE;
+
+    TRACE_EXIT();
 
     return TRUE;
 }
 
 
-static Bool msSharedPixmapNotifyDamage(PixmapPtr ppix)
+static Bool LS_SharedPixmapNotifyDamage(PixmapPtr ppix)
 {
+    ScreenPtr screen = ppix->drawable.pScreen;
+    ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+    loongsonPtr lsp = loongsonPTR(scrn);
+    xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
+    msPixmapPrivPtr ppriv = msGetPixmapPriv(&lsp->drmmode, ppix);
     Bool ret = FALSE;
     int c;
 
-    ScreenPtr screen = ppix->drawable.pScreen;
-    ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-    loongsonPtr ms = loongsonPTR(scrn);
-    xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
-
-    msPixmapPrivPtr ppriv = msGetPixmapPriv(&ms->drmmode, ppix);
+    TRACE_ENTER();
 
     if (!ppriv->wait_for_damage)
         return ret;
+
     ppriv->wait_for_damage = FALSE;
 
     for (c = 0; c < xf86_config->num_crtc; c++)
@@ -1117,30 +1258,41 @@ static Bool msSharedPixmapNotifyDamage(PixmapPtr ppix)
             continue;
 
         // Received damage on master screen pixmap, schedule present on vblank
-        ret |= drmmode_SharedPixmapPresentOnVBlank(ppix, crtc, &ms->drmmode);
+        ret |= drmmode_SharedPixmapPresentOnVBlank(ppix, crtc, &lsp->drmmode);
     }
+
+    TRACE_EXIT();
 
     return ret;
 }
 
-
-static Bool SetMaster(ScrnInfoPtr pScrn)
+static Bool LS_SetMaster(ScrnInfoPtr pScrn)
 {
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     int ret;
 
 #ifdef XF86_PDEV_SERVER_FD
-    if ( (ms->pEnt->location.type == BUS_PLATFORM) &&
-        (ms->pEnt->location.id.plat->flags & XF86_PDEV_SERVER_FD))
+    if ((lsp->pEnt->location.type == BUS_PLATFORM) &&
+        (lsp->pEnt->location.id.plat->flags & XF86_PDEV_SERVER_FD))
         return TRUE;
 #endif
 
-    ret = drmSetMaster(ms->fd);
+   /*
+    * This must be set for any ioctl which can change the display state.
+    * Userspace must call the ioctl through a primary node, while it is
+    * the active master.
+    */
+    ret = drmSetMaster(lsp->fd);
     if (ret)
+    {
         xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "drmSetMaster failed: %s\n",
                    strerror(errno));
+        return FALSE;
+    }
 
-    return ret == 0;
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Set master success!\n");
+
+    return TRUE;
 }
 
 /* When the root window is created, initialize the screen contents from
@@ -1150,14 +1302,19 @@ static Bool CreateWindow_oneshot(WindowPtr pWin)
 {
     ScreenPtr pScreen = pWin->drawable.pScreen;
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
     Bool ret;
 
-    pScreen->CreateWindow = ms->CreateWindow;
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s start\n", __func__);
+
+    pScreen->CreateWindow = lsp->CreateWindow;
     ret = pScreen->CreateWindow(pWin);
 
     if (ret)
-        drmmode_copy_fb(pScrn, &ms->drmmode);
+        drmmode_copy_fb(pScrn, &lsp->drmmode);
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s finish\n", __func__);
+
     return ret;
 }
 
@@ -1173,14 +1330,14 @@ static Bool CreateWindow_oneshot(WindowPtr pWin)
 // If a resource is registered by more than one entity the entity
 // will be marked to need to share this resources type (IO or MEM).
 //
-// A resource marked “disabled” during OPERATING state will be
+// A resource marked "disabled" during OPERATING state will be
 // ignored entirely.
 //
-// A resource marked “unused” will only conflicts with an overlapping
+// A resource marked "unused" will only conflicts with an overlapping
 // resource of an other entity if the second is actually in use during
 // OPERATING state.
 //
-// If an “unused” resource was found to conflict however the entity
+// If an "unused" resource was found to conflict however the entity
 // does not use any other resource of this type the entire resource
 // type will be disabled for that entity.
 //
@@ -1206,84 +1363,90 @@ static Bool CreateWindow_oneshot(WindowPtr pWin)
 // before it will return. This should be used if a resource
 // which can be controlled in a device dependent way is only
 // required during SETUP state.
-// This way it can be marked “unused” during OPERATING state.
+// This way it can be marked "unused" during OPERATING state.
 
 
 static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = loongsonPTR(pScrn);
-    struct drmmode_rec * pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * pDrmMode = &lsp->drmmode;
     Bool ret = FALSE;
 #ifdef GLAMOR_HAS_GBM
-    struct GlamorAPI * const pGlamor = &ms->glamor;
+    struct GlamorAPI * const pGlamor = &lsp->glamor;
 #endif
+    pDrmMode->gbm = NULL;
 
     xf86Msg(X_INFO, "\n");
     xf86Msg(X_INFO, "-------- %s started --------\n", __func__);
 
     pScrn->pScreen = pScreen;
 
-    if (SetMaster(pScrn) == FALSE)
+    ret = LS_SetMaster(pScrn);
+    if (ret == FALSE)
     {
         return FALSE;
     }
 
     /* HW dependent - FIXME */
     /* loongson's display controller require the stride is 256 byte aligned */
-    pScrn->virtualX = (pScrn->virtualX + 63) & ~63;
-
     pScrn->displayWidth = pScrn->virtualX;
 
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "virtualX=%d, virtuaY=%d\n",
+               pScrn->virtualX, pScrn->virtualY);
 
-#ifdef GLAMOR_HAS_GBM
     if (pDrmMode->glamor_enabled)
     {
-        int bpp = pDrmMode->kbpp;
-        int width = pScrn->virtualX;
-        int height = pScrn->virtualY;
-        Bool bo_create_res;
-
+#ifdef GLAMOR_HAS_GBM
         pDrmMode->gbm = pGlamor->egl_get_gbm_device(pScreen);
 
-        bo_create_res = ls_glamor_create_gbm_bo(pScrn,
-                                                &pDrmMode->front_bo,
-                                                width,
-                                                height,
-                                                bpp);
-        if (bo_create_res == FALSE)
+        pDrmMode->front_bo = ls_glamor_create_gbm_bo(pScrn,
+                                                     pScrn->virtualX,
+                                                     pScrn->virtualY,
+                                                     pDrmMode->kbpp);
+        if (!pDrmMode->front_bo)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                   "GBM: Create front bo failed.\n");
+                       "glamor: Create front bo failed.\n");
 
             return FALSE;
         }
+#endif
     }
     else
-#endif
     {
-        ret = LS_CreateFrontBO(pScrn, pDrmMode);
-        if (ret == FALSE)
+        pDrmMode->front_bo = LS_CreateFrontBO(pScrn,
+                                              lsp->fd,
+                                              pScrn->virtualX,
+                                              pScrn->virtualY,
+                                              pDrmMode->kbpp);
+        if (!pDrmMode->front_bo)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                   "DUMB: Create front bo failed.\n");
+                       "%s: Create front bo failed.\n", __func__);
 
             return FALSE;
         }
+
+        if (pDrmMode->shadow_enable || pDrmMode->exa_shadow_enabled)
+        {
+            LS_ShadowAllocFB(pScrn,
+                             pScrn->virtualX,
+                             pScrn->virtualY,
+                             pDrmMode->kbpp,
+                             &pDrmMode->shadow_fb);
+
+            xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
+                       "Create shadow of front buffer\n");
+        }
     }
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-            "virtualX=%d, virtuaY=%d\n",
-            pScrn->virtualX, pScrn->virtualY);
+    pScrn->displayWidth = drmmode_bo_get_pitch(pDrmMode->front_bo) / pDrmMode->kbpp;
 
     if (LS_CreateCursorBO(pScrn, pDrmMode) == FALSE)
     {
         return FALSE;
-    }
-
-    if (pDrmMode->shadow_enable)
-    {
-        LS_ShadowAllocFB(pScrn, &pDrmMode->shadow_fb);
     }
 
     /* Reset the visual list. */
@@ -1291,7 +1454,8 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 
     if (!miSetVisualTypes(pScrn->depth,
                           miGetDefaultVisualMask(pScrn->depth),
-                          pScrn->rgbBits, pScrn->defaultVisual))
+                          pScrn->rgbBits,
+                          pScrn->defaultVisual))
     {
         return FALSE;
     }
@@ -1303,9 +1467,9 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 
     /* OUTPUT SLAVE SUPPORT */
     if (!dixRegisterScreenSpecificPrivateKey(pScreen,
-            &pDrmMode->pixmapPrivateKeyRec,
-            PRIVATE_PIXMAP,
-            sizeof(msPixmapPrivRec)))
+                                             &pDrmMode->pixmapPrivateKeyRec,
+                                             PRIVATE_PIXMAP,
+                                             sizeof(msPixmapPrivRec)))
     {
         return FALSE;
     }
@@ -1322,15 +1486,42 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     // fbScreenInit() is used to tell the fb layer where the video card
     // framebuffer is.
     //
-    if (!fbScreenInit(pScreen, NULL,
-                      pScrn->virtualX,
-                      pScrn->virtualY,
-                      pScrn->xDpi,
-                      pScrn->yDpi,
-                      pScrn->displayWidth,
-                      pScrn->bitsPerPixel))
+    if (pDrmMode->glamor_enabled)
     {
-        return FALSE;
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+                   "Init fb layer for glamor\n");
+
+        if (!fbScreenInit(pScreen,
+                          NULL,
+                          pScrn->virtualX,
+                          pScrn->virtualY,
+                          pScrn->xDpi,
+                          pScrn->yDpi,
+                          pScrn->displayWidth,
+                          pScrn->bitsPerPixel))
+        {
+            return FALSE;
+        }
+    }
+    else
+    {
+        struct DrmModeBO *pFrontBO = pDrmMode->front_bo;
+        void *pixels = LS_MapFrontBO(pScrn, lsp->fd, pFrontBO);
+
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "Init fb layer\n");
+
+        /* Init fb layer */
+        if (!fbScreenInit(pScreen,
+                          pixels,
+                          pScrn->virtualX,
+                          pScrn->virtualY,
+                          pScrn->xDpi,
+                          pScrn->yDpi,
+                          pScrn->displayWidth,
+                          pScrn->bitsPerPixel))
+        {
+            return FALSE;
+        }
     }
 
     if (pScrn->bitsPerPixel > 8)
@@ -1369,7 +1560,7 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 
     if (pDrmMode->shadow_enable)
     {
-        if (ms->shadow.Setup(pScreen) == FALSE)
+        if (lsp->shadow.Setup(pScreen) == FALSE)
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Shadow fb init failed.\n");
 
@@ -1385,9 +1576,11 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
      * possible private-requesting modules have been inited; we create the
      * screen pixmap here.
      */
-    ms->createScreenResources = pScreen->CreateScreenResources;
+    lsp->createScreenResources = pScreen->CreateScreenResources;
     pScreen->CreateScreenResources = LS_CreateScreenResources;
 
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+               "LS Create Screen Resources hook up\n");
 
     /* Set the initial black & white colormap indices: */
     xf86SetBlackWhitePixels(pScreen);
@@ -1409,7 +1602,7 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     /* Need to extend HWcursor support to handle mask interleave */
     if (pDrmMode->sw_cursor == FALSE)
     {
-        xf86_cursors_init(pScreen, ms->cursor_width, ms->cursor_height,
+        xf86_cursors_init(pScreen, lsp->cursor_width, lsp->cursor_height,
                           HARDWARE_CURSOR_SOURCE_MASK_INTERLEAVE_64 |
                           HARDWARE_CURSOR_UPDATE_UNHIDDEN |
                           HARDWARE_CURSOR_ARGB);
@@ -1418,19 +1611,9 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
      * later memory should be bound when allocating, e.g rotate_mem */
     pScrn->vtSema = TRUE;
 
-    if (pDrmMode->exa_enabled == TRUE)
-    {
-        if (!LS_InitExaLayer(pScreen))
-        {
-            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                    "%s: initial EXA Layer failed\n", __func__);
-        }
-    }
-
-
     if ((serverGeneration == 1) && bgNoneRoot && pDrmMode->glamor_enabled)
     {
-        ms->CreateWindow = pScreen->CreateWindow;
+        lsp->CreateWindow = pScreen->CreateWindow;
         pScreen->CreateWindow = CreateWindow_oneshot;
     }
 
@@ -1442,10 +1625,10 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     // to wrap are CloseScreen() and SaveScreen().
     //
     pScreen->SaveScreen = xf86SaveScreen;
-    ms->CloseScreen = pScreen->CloseScreen;
+    lsp->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = CloseScreen;
 
-    ms->BlockHandler = pScreen->BlockHandler;
+    lsp->BlockHandler = pScreen->BlockHandler;
     pScreen->BlockHandler = LS_BlockHandler_Oneshot;
 
     // pixmap sharing infrastructure
@@ -1466,9 +1649,8 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     pScreen->StartPixmapTracking = PixmapStartDirtyTracking;
     pScreen->StopPixmapTracking = PixmapStopDirtyTracking;
 
-    pScreen->SharedPixmapNotifyDamage = msSharedPixmapNotifyDamage;
-    pScreen->RequestSharedPixmapNotifyDamage =
-        msRequestSharedPixmapNotifyDamage;
+    pScreen->SharedPixmapNotifyDamage = LS_SharedPixmapNotifyDamage;
+    pScreen->RequestSharedPixmapNotifyDamage = LS_RequestSharedPixmapNotifyDamage;
 
     pScreen->PresentSharedPixmap = msPresentSharedPixmap;
     pScreen->StopFlippingPixmapTracking = msStopFlippingPixmapTracking;
@@ -1488,7 +1670,7 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
         DPMS mode is changed. We also try to do it in an atomic commit
         when possible.
     */
-    if (ms->atomic_modeset)
+    if (lsp->atomic_modeset)
     {
         xf86DPMSInit(pScreen, drmmode_set_dpms, 0);
     }
@@ -1511,6 +1693,15 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     }
 #endif
 
+    if (pDrmMode->exa_enabled == TRUE)
+    {
+        if (!LS_InitExaLayer(pScreen))
+        {
+            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                    "%s: initial EXA Layer failed\n", __func__);
+        }
+    }
+
     if (serverGeneration == 1)
     {
         xf86ShowUnusedOptions(pScrn->scrnIndex, pScrn->options);
@@ -1526,7 +1717,7 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 #ifdef GLAMOR_HAS_GBM
     if (pDrmMode->glamor_enabled)
     {
-        if (!(pDrmMode->dri2_enable = ms_dri2_screen_init(pScreen)))
+        if (!(pDrmMode->dri2_enable = loongson_dri2_screen_init(pScreen)))
         {
             xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
                        "Failed to initialize the DRI2 extension.\n");
@@ -1544,16 +1735,18 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
         if (pDrmMode->exa_enabled)
         {
             pDrmMode->dri2_enable = FALSE;
-            #if 0
-            // TODO : add exa + dri2 support
-            ms->drmmode.dri2_enable = ms_dri2_screen_init(pScreen);
-            if ( ms->drmmode.dri2_enable == FALSE)
+#if HAVE_LIBDRM_GSGPU
+            if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
             {
-                xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-                        "Failed to initialize the DRI2 extension.\n");
+                // TODO : add exa + dri2 support for gsgpu
+                pDrmMode->dri2_enable = gsgpu_dri2_screen_init(pScreen);
+                if (pDrmMode->dri2_enable == FALSE)
+                {
+                    xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                           "Failed to initialize the DRI2 extension.\n");
+                }
             }
-            #endif
-
+#endif
             pDrmMode->present_enable = ms_present_screen_init(pScreen);
             if (pDrmMode->present_enable == FALSE)
             {
@@ -1569,14 +1762,33 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     }
 
 #ifdef DRI3
-    if (pDrmMode->exa_enabled)
+    if (pDrmMode->exa_enabled && lsp->is_prime_supported)
     {
         if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
-            ret = LS_DRI3_Init(pScreen);
+        {
+            if (lsp->is_lsdc)
+                ret = LS_DRI3_Init(pScreen, "lsdc");
+            else if (lsp->is_loongson_drm)
+                ret = LS_DRI3_Init(pScreen, "loongson-drm");
+            else if (lsp->is_gsgpu)
+                ret = LS_DRI3_Init(pScreen, "gsgpu");
+        }
+#if HAVE_LIBDRM_ETNAVIV
         else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
-            ret = etnaviv_dri3_ScreenInit(pScreen);
+        {
+            if (lsp->is_lsdc)
+                ret = etnaviv_dri3_ScreenInit(pScreen);
+
+            if (lsp->is_loongson_drm)
+                ret = etnaviv_dri3_ScreenInit(pScreen);
+        }
+#endif
+#if HAVE_LIBDRM_GSGPU
         else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
             ret = gsgpu_dri3_init(pScreen);
+#endif
+        else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE)
+            ret = LS_DRI3_Init(pScreen, "loongson-drm");
 
         if (ret == FALSE)
         {
@@ -1597,24 +1809,30 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 
 static void AdjustFrame(ScrnInfoPtr pScrn, int x, int y)
 {
-    loongsonPtr ms = loongsonPTR(pScrn);
+    loongsonPtr lsp = loongsonPTR(pScrn);
 
-    drmmode_adjust_frame(pScrn, &ms->drmmode, x, y);
+    drmmode_adjust_frame(pScrn, &lsp->drmmode, x, y);
 }
 
 
 static void FreeScreen(ScrnInfoPtr pScrn)
 {
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s begin\n", __func__);
+
     if (pScrn)
     {
         FreeRec(pScrn);
     }
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s finished\n", __func__);
 }
 
 
 static void LeaveVT(ScrnInfoPtr pScrn)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s begin\n", __func__);
 
     xf86_hide_cursors(pScrn);
 
@@ -1629,6 +1847,8 @@ static void LeaveVT(ScrnInfoPtr pScrn)
 #endif
 
     drmDropMaster(lsp->fd);
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s finished\n", __func__);
 }
 
 /*
@@ -1637,15 +1857,20 @@ static void LeaveVT(ScrnInfoPtr pScrn)
 static Bool EnterVT(ScrnInfoPtr pScrn)
 {
     loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec *pDrmMode = &lsp->drmmode;
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s begin\n", __func__);
 
     pScrn->vtSema = TRUE;
 
-    SetMaster(pScrn);
+    LS_SetMaster(pScrn);
 
-    if (!drmmode_set_desired_modes(pScrn, &lsp->drmmode, TRUE))
+    if (!loongson_set_desired_modes(pScrn, pDrmMode, TRUE))
     {
         return FALSE;
     }
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s finished\n", __func__);
 
     return TRUE;
 }
@@ -1653,6 +1878,8 @@ static Bool EnterVT(ScrnInfoPtr pScrn)
 
 static Bool SwitchMode(ScrnInfoPtr pScrn, DisplayModePtr mode)
 {
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s\n", __func__);
+
     return xf86SetSingleMode(pScrn, mode, RR_Rotate_0);
 }
 
@@ -1660,45 +1887,45 @@ static Bool SwitchMode(ScrnInfoPtr pScrn, DisplayModePtr mode)
 static Bool CloseScreen(ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr ms = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &ms->drmmode;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s\n", __func__);
 
     LS_EntityClearAssignedCrtc(pScrn);
 
-#ifdef GLAMOR_HAS_GBM
     if (pDrmMode->dri2_enable)
     {
-        ms_dri2_close_screen(pScreen);
-    }
+        if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
+        {
+#if HAVE_LIBDRM_GSGPU
+            gsgpu_dri2_close_screen(pScreen);
 #endif
+        }
+        else
+        {
+#ifdef GLAMOR_HAS_GBM
+            loongson_dri2_close_screen(pScreen);
+#endif
+        }
+    }
 
     ms_vblank_close_screen(pScreen);
 
-    if (ms->damage)
-    {
-        DamageUnregister(ms->damage);
-        DamageDestroy(ms->damage);
-        ms->damage = NULL;
-    }
-
-    if (pDrmMode->exa_enabled)
-    {
-        LS_DestroyExaLayer(pScreen);
-    }
-
+    loongson_damage_destroy(pScreen, &lsp->damage);
+    lsp->dirty_enabled = FALSE;
 
     if (pDrmMode->shadow_enable)
     {
-        ms->shadow.Remove(pScreen, pScreen->GetScreenPixmap(pScreen));
+        lsp->shadow.Remove(pScreen, pScreen->GetScreenPixmap(pScreen));
 
         LS_ShadowFreeFB(pScrn, &pDrmMode->shadow_fb);
-
-        LS_ShadowFreeFB(pScrn, &pDrmMode->shadow_fb2);
     }
 
     drmmode_uevent_fini(pScrn, pDrmMode);
 
-    LS_FreeFrontBO(pScrn, pDrmMode);
+    LS_FreeFrontBO(pScrn, lsp->fd, pDrmMode->fb_id, pDrmMode->front_bo);
+    pDrmMode->fb_id = 0;
 
     LS_FreeCursorBO(pScrn, pDrmMode);
 
@@ -1712,11 +1939,21 @@ static Bool CloseScreen(ScreenPtr pScreen)
         LeaveVT(pScrn);
     }
 
-    pScreen->CreateScreenResources = ms->createScreenResources;
-    pScreen->BlockHandler = ms->BlockHandler;
+    if (pDrmMode->exa_enabled)
+    {
+        // LS_DestroyExaLayer(pScreen);
+        if (pDrmMode->exa_shadow_enabled)
+        {
+            LS_ShadowFreeFB(pScrn, &pDrmMode->shadow_fb);
+            xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+                       "EXA: Freeing shadow of front bo\n");
+        }
+    }
 
-    pScrn->vtSema = FALSE;
-    pScreen->CloseScreen = ms->CloseScreen;
+    pScreen->CreateScreenResources = lsp->createScreenResources;
+    pScreen->BlockHandler = lsp->BlockHandler;
+    pScreen->CloseScreen = lsp->CloseScreen;
+
     return (*pScreen->CloseScreen) (pScreen);
 }
 

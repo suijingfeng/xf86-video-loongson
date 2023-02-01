@@ -1,5 +1,6 @@
 /*
- * Copyright © 2007 Red Hat, Inc.
+ * Copyright (C) 2007 Red Hat, Inc.
+ * Copyright (C) 2022 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -40,6 +41,8 @@
 #include "dumb_bo.h"
 #include "loongson_exa.h"
 
+#define RR_Rotate_MASK (RR_Rotate_0 | RR_Rotate_90 | RR_Rotate_180 | RR_Rotate_270)
+
 struct gbm_device;
 
 enum drmmode_plane_property {
@@ -76,18 +79,6 @@ enum drmmode_crtc_property {
     DRMMODE_CRTC__COUNT
 };
 
-struct DrmModeBO {
-    uint32_t width;
-    uint32_t height;
-    struct dumb_bo *dumb;
-#ifdef GLAMOR_HAS_GBM
-    Bool used_modifiers;
-    struct gbm_bo *gbm;
-#endif
-};
-
-typedef struct DrmModeBO drmmode_bo;
-
 struct drmmode_rec {
     int fd;
     unsigned fb_id;
@@ -103,7 +94,8 @@ struct drmmode_rec {
     InputHandlerProc uevent_handler;
 #endif
     drmEventContext event_context;
-    drmmode_bo front_bo;
+
+    struct DrmModeBO *front_bo;
     Bool sw_cursor;
 
     /* Broken-out options. */
@@ -111,17 +103,14 @@ struct drmmode_rec {
 
     Bool glamor_enabled;
     Bool exa_enabled;
+    Bool exa_shadow_enabled;
     enum ExaAccelType exa_acc_type;
     Bool shadow_enable;
-    Bool shadow_enable2;
+    Bool shadow_present;
 
-#ifdef DRI3
-    char *dri3_device_name;
-#endif
     /** Is Option "PageFlip" enabled? */
     Bool pageflip;
     void *shadow_fb;
-    void *shadow_fb2;
     /* SCREEN SPECIFIC_PRIVATE_KEYS */
     DevPrivateKeyRec pixmapPrivateKeyRec;
     DevScreenPrivateKeyRec spritePrivateKeyRec;
@@ -129,7 +118,6 @@ struct drmmode_rec {
     int sprites_visible;
 
     Bool is_secondary;
-    Bool is_lsdc;
 
     PixmapPtr fbcon_pixmap;
 
@@ -187,8 +175,10 @@ struct drmmode_crtc_private_rec {
     uint32_t num_formats;
     drmmode_format_rec *formats;
 
-    drmmode_bo rotate_bo;
+    drmmode_bo *rotate_bo;
     unsigned rotate_fb_id;
+
+    PixmapPtr rotate_pixmap;
 
     PixmapPtr prime_pixmap;
     PixmapPtr prime_pixmap_back;
@@ -257,12 +247,6 @@ typedef struct _msSpritePriv {
 
 Bool drmmode_is_format_supported(ScrnInfoPtr scrn, uint32_t format,
                                  uint64_t modifier);
-int drmmode_bo_import(drmmode_ptr drmmode, drmmode_bo *bo,
-                      uint32_t *fb_id);
-int drmmode_bo_destroy(drmmode_ptr drmmode, drmmode_bo *bo);
-uint32_t drmmode_bo_get_pitch(drmmode_bo *bo);
-uint32_t drmmode_bo_get_handle(drmmode_bo *bo);
-
 
 Bool drmmode_SharedPixmapPresentOnVBlank(PixmapPtr frontTarget, xf86CrtcPtr crtc,
                                          drmmode_ptr drmmode);

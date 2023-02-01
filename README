@@ -26,25 +26,28 @@ For more information on the git code manager, see:
         http://wiki.x.org/wiki/GitPage
 
 
-### Dependency
+### Dependency, Build and Install
 
 # On fedora/centos
 
-yum install git automake xorg-x11-util-macros libXrandr-devel libdrm-devel xorg-x11-server-devel
-
-# On debian
-
-$ sudo apt-get install automake autotool xserver-xorg-dev libdrm-dev libudev-dev xutils-dev libgbm-dev
-
-### Build and Install
-
-$ ./autogen.sh
-
-# if build on loongnix
-$ ./configure --prefix=/usr --libdir=/usr/lib64/
-# if build on UOS
-$ ./configure --prefix=/usr
-
+$ sudo yum install git automake xorg-x11-util-macros libXrandr-devel libdrm-devel xorg-x11-server-devel
+$ ./autogen.sh --prefix=/usr --libdir=/usr/lib64/
 $ make -j4
 $ sudo make install
 
+
+# On debian/ubuntu/uos
+
+$ sudo apt install automake xserver-xorg-dev libdrm-dev libudev-dev libgbm-dev xutils-dev xorg-dev libtool
+$ ./autogen.sh --prefix=/usr
+$ make -j4
+$ sudo make install
+
+
+On x86 platform if you don't have libdrm-etnaviv and libdrm-gsgpu, build is still possible
+
+for example on ubuntu-20.04
+
+$ ./autogen.sh --prefix=/usr --disable-etnaviv --disable-gsgpu
+$ make -j4
+$ sudo make install

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020 Loongson Corporation
+ * Copyright (C) 2020 Loongson Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -149,6 +149,53 @@ uint32_t get_opaque_format(uint32_t format)
     }
 }
 
+int ls_glamor_bo_import(drmmode_ptr drmmode, drmmode_bo *bo, uint32_t *fb_id)
+{
+    ScrnInfoPtr pScrn = drmmode->scrn;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+
+#ifdef GBM_BO_WITH_MODIFIERS
+    if (bo->gbm && lsp->kms_has_modifiers &&
+        gbm_bo_get_modifier(bo->gbm) != DRM_FORMAT_MOD_INVALID)
+    {
+        int num_fds;
+
+        num_fds = gbm_bo_get_plane_count(bo->gbm);
+        if (num_fds > 0)
+        {
+            int i;
+            uint32_t format;
+            uint32_t handles[4];
+            uint32_t strides[4];
+            uint32_t offsets[4];
+            uint64_t modifiers[4];
+
+            memset(handles, 0, sizeof(handles));
+            memset(strides, 0, sizeof(strides));
+            memset(offsets, 0, sizeof(offsets));
+            memset(modifiers, 0, sizeof(modifiers));
+
+            format = gbm_bo_get_format(bo->gbm);
+            format = get_opaque_format(format);
+            for (i = 0; i < num_fds; i++)
+            {
+                handles[i] = gbm_bo_get_handle_for_plane(bo->gbm, i).u32;
+                strides[i] = gbm_bo_get_stride_for_plane(bo->gbm, i);
+                offsets[i] = gbm_bo_get_offset(bo->gbm, i);
+                modifiers[i] = gbm_bo_get_modifier(bo->gbm);
+            }
+
+            return drmModeAddFB2WithModifiers(drmmode->fd, bo->width, bo->height,
+                                              format, handles, strides,
+                                              offsets, modifiers, fb_id,
+                                              DRM_MODE_FB_MODIFIERS);
+        }
+    }
+#endif
+
+    return 0;
+}
+
 #ifdef GBM_BO_WITH_MODIFIERS
 static uint32_t get_modifiers_set(ScrnInfoPtr pScrn,
                                   uint32_t format,
@@ -259,15 +306,16 @@ static Bool get_drawable_modifiers(DrawablePtr draw, uint32_t format,
 }
 #endif
 
-Bool ls_glamor_create_gbm_bo(ScrnInfoPtr pScrn,
-                             drmmode_bo *bo,
-                             unsigned width,
-                             unsigned height,
-                             unsigned bpp)
+struct DrmModeBO *
+ls_glamor_create_gbm_bo(ScrnInfoPtr pScrn,
+                        unsigned width,
+                        unsigned height,
+                        unsigned bpp)
 {
 #ifdef GLAMOR_HAS_GBM
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
+    struct DrmModeBO *pFront;
 
 #ifdef GBM_BO_WITH_MODIFIERS
     uint32_t num_modifiers;
@@ -275,8 +323,14 @@ Bool ls_glamor_create_gbm_bo(ScrnInfoPtr pScrn,
 #endif
     uint32_t format;
 
-    bo->width = width;
-    bo->height = height;
+    pFront = calloc(1, sizeof(struct DrmModeBO));
+    if (!pFront)
+    {
+        xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "%s: no memmory\n", __func__);
+        return NULL;
+    }
+    pFront->width = width;
+    pFront->height = height;
 
     switch (pScrn->depth)
     {
@@ -299,31 +353,38 @@ Bool ls_glamor_create_gbm_bo(ScrnInfoPtr pScrn,
     if ((num_modifiers > 0) &&
             !((num_modifiers == 1) && (modifiers[0] == DRM_FORMAT_MOD_INVALID)))
     {
-            bo->gbm = gbm_bo_create_with_modifiers(pDrmMode->gbm,
-                                                   width,
-                                                   height,
-                                                   format,
-                                                   modifiers,
-                                                   num_modifiers);
+            pFront->gbm = gbm_bo_create_with_modifiers(pDrmMode->gbm,
+                                                       width,
+                                                       height,
+                                                       format,
+                                                       modifiers,
+                                                       num_modifiers);
             free(modifiers);
-            if (bo->gbm)
+            if (pFront->gbm)
             {
-                bo->used_modifiers = TRUE;
-                return TRUE;
+                pFront->used_modifiers = TRUE;
+                return pFront;
             }
     }
 #endif
 
-    bo->gbm = gbm_bo_create(pDrmMode->gbm,
-                            width,
-                            height,
-                            format,
-                            GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
-    bo->used_modifiers = FALSE;
+    pFront->gbm = gbm_bo_create(pDrmMode->gbm,
+                                width,
+                                height,
+                                format,
+                                GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
 
-    return bo->gbm != NULL;
+    if (!pFront->gbm)
+    {
+        free(pFront);
+        return NULL;
+    }
+
+    pFront->used_modifiers = FALSE;
+    pFront->pitch = gbm_bo_get_stride(pFront->gbm);
+
 #endif
-    return TRUE;
+    return pFront;
 }
 
 
@@ -332,8 +393,8 @@ Bool ls_glamor_init(ScrnInfoPtr pScrn)
 {
 #ifdef GLAMOR_HAS_GBM
     ScreenPtr pScreen = xf86ScrnToScreen(pScrn);
-    loongsonPtr ls = loongsonPTR(pScrn);
-    struct GlamorAPI * const pGlamor = &ls->glamor;
+    loongsonPtr lsp = loongsonPTR(pScrn);
+    struct GlamorAPI * const pGlamor = &lsp->glamor;
 
     if (pGlamor->init(pScreen, GLAMOR_USE_EGL_SCREEN) == FALSE)
     {
