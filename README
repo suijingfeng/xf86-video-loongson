@@ -57,3 +57,8 @@ for example on ubuntu-20.04
 $ ./autogen.sh --prefix=/usr --disable-etnaviv --disable-gsgpu
 $ make -j4
 $ sudo make install
+
+
+### Doc
+
+![driver framework](https://github.com/suijingfeng/xf86-video-loongson/blob/master/doc/driver_framework.png)
