@@ -72,6 +72,8 @@ ls7a1000使用loongson-drm+etnaviv驱动，开启 exa + etnaviv 加速后端的�
 
 将 /usr/share/X11/xorg.conf.d/20-loongson.conf 改成如下所示配置
 
+
+```
 Section "OutputClass" 
     Identifier      "LOONGSON-DC" 
     MatchDriver     "loongson-drm" 
@@ -83,4 +85,4 @@ Section "OutputClass"
     Option          "ShadowFB"      "false" 
     Option          "PageFlip"      "false" 
 EndSection
-
+```
