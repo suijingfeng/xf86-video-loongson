@@ -61,4 +61,4 @@ $ sudo make install
 
 ### Doc
 
-![driver framework](https://github.com/suijingfeng/xf86-video-loongson/blob/master/doc/driver_framework.png)
+![driver_framework](https://github.com/suijingfeng/xf86-video-loongson/blob/master/doc/driver_framework.png)
