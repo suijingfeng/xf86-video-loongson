@@ -62,3 +62,25 @@ $ sudo make install
 ### Doc
 
 ![driver_framework](https://github.com/suijingfeng/xf86-video-loongson/blob/master/doc/driver_framework.png)
+
+exa + etnaviv 后端
+
+ls7a1000 + 3A3000/3A4000/3A5000平台上， 内核用 loongosn-drm + etnaviv 驱动时，
+xf86-video-loongson 始化了 X server的dri3层，可以实现用etanviv驱动加速3D客户端app(demo version).
+
+ls7a1000使用loongson-drm+etnaviv驱动，开启 exa + etnaviv 加速后端的方法：
+
+将 /usr/share/X11/xorg.conf.d/20-loongson.conf 改成如下所示配置
+
+Section "OutputClass" 
+    Identifier      "LOONGSON-DC" 
+    MatchDriver     "loongson-drm" 
+    Driver          "loongson" 
+    Option          "PrimaryGPU"    "true" 
+    Option          "AccelMethod"   "exa" 
+    Option          "ExaType"       "etnaviv" 
+    Option          "SWcursor"      "true" 
+    Option          "ShadowFB"      "false" 
+    Option          "PageFlip"      "false" 
+EndSection
+
