@@ -862,9 +862,9 @@ static Bool
 drmmode_SharedPixmapPresent(PixmapPtr ppix, xf86CrtcPtr crtc,
                             drmmode_ptr drmmode)
 {
-    ScreenPtr master = crtc->randr_crtc->pScreen->current_master;
+    ScreenPtr primary = crtc->randr_crtc->pScreen->current_primary;
 
-    if (master->PresentSharedPixmap(ppix)) {
+    if (primary->PresentSharedPixmap(ppix)) {
         /* Success, queue flip to back target */
         if (drmmode_SharedPixmapFlip(ppix, crtc, drmmode))
             return TRUE;
@@ -876,13 +876,13 @@ drmmode_SharedPixmapPresent(PixmapPtr ppix, xf86CrtcPtr crtc,
     }
 
     /* Failed to present, try again on next vblank after damage */
-    if (master->RequestSharedPixmapNotifyDamage) {
+    if (primary->RequestSharedPixmapNotifyDamage) {
         msPixmapPrivPtr ppriv = msGetPixmapPriv(drmmode, ppix);
 
         /* Set flag first in case we are immediately notified */
         ppriv->wait_for_damage = TRUE;
 
-        if (master->RequestSharedPixmapNotifyDamage(ppix))
+        if (primary->RequestSharedPixmapNotifyDamage(ppix))
             return TRUE;
         else
             ppriv->wait_for_damage = FALSE;

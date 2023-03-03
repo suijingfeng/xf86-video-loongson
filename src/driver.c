@@ -189,89 +189,6 @@ static Bool LS_AllocDriverPrivate(ScrnInfoPtr pScrn)
 }
 
 
-static void redisplay_dirty(ScreenPtr pScreen,
-                            PixmapDirtyUpdatePtr dirty,
-                            int *timeout)
-{
-    RegionRec pixregion;
-    // Shared / Scanout pixmap
-    PixmapPtr pSlaveDst = dirty->slave_dst;
-    PixmapRegionInit(&pixregion, pSlaveDst);
-    DamageRegionAppend(&pSlaveDst->drawable, &pixregion);
-    PixmapSyncDirtyHelper(dirty);
-
-    if (!pScreen->isGPU)
-    {
-#ifdef GLAMOR_HAS_GBM
-        loongsonPtr lsp = loongsonPTR(xf86ScreenToScrn(pScreen));
-        struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-
-        if (pDrmMode->glamor_enabled)
-        {
-            struct GlamorAPI * const pGlamor = &lsp->glamor;
-
-            /*
-             * When copying from the master framebuffer to the shared pixmap,
-             * we must ensure the copy is complete before the slave starts a
-             * copy to its own framebuffer (some slaves scanout directly from
-             * the shared pixmap, but not all).
-             */
-            pGlamor->finish(pScreen);
-        }
-#endif
-
-        INFO_MSG("%s: is not GPU\n", __func__);
-
-        /* Ensure the slave processes the damage immediately */
-        if (timeout)
-            *timeout = 0;
-    }
-
-    DamageRegionProcessPending(&pSlaveDst->drawable);
-    RegionUninit(&pixregion);
-}
-
-
-static void ls_dirty_update(ScreenPtr pScreen, int *timeout)
-{
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    PixmapDirtyUpdatePtr ent;
-
-    xorg_list_for_each_entry(ent, &pScreen->pixmap_dirty_list, ent)
-    {
-        RegionPtr region = DamageRegion(ent->damage);
-        /* Shared / scanout pixmap */
-        PixmapPtr pSlaveDst = ent->slave_dst;
-
-        if (RegionNotEmpty(region))
-        {
-            if (!pScreen->isGPU)
-            {
-                msPixmapPrivPtr ppriv =
-                    msGetPixmapPriv(pDrmMode, pSlaveDst->master_pixmap);
-
-                if (ppriv->notify_on_damage)
-                {
-                    ppriv->notify_on_damage = FALSE;
-
-                    pSlaveDst->drawable.pScreen->SharedPixmapNotifyDamage(
-                                                     pSlaveDst);
-                }
-
-                /* Requested manual updating */
-                if (ppriv->defer_dirty_update)
-                    continue;
-            }
-
-            redisplay_dirty(pScreen, ent, timeout);
-            DamageEmpty(ent->damage);
-        }
-    }
-}
-
-
 static void msBlockHandler(ScreenPtr pScreen, void *timeout)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
@@ -289,26 +206,9 @@ static void msBlockHandler(ScreenPtr pScreen, void *timeout)
                    "%s IS GPU, dispatch dirty\n", __func__);
         LS_DispatchSlaveDirty(pScreen);
     }
-/*
-    else if (lsp->dirty_enabled)
-    {
-        if (!pDrmMode->exa_shadow_enabled)
-        {
-            // Workaround: this is not required when exa+shadowfb is enabled
-            LS_DispatchDirty(pScreen);
-        }
-    }
-*/
+
     if (pDrmMode->exa_shadow_enabled)
         loongson_dispatch_dirty(pScreen);
-
-    if (!xorg_list_is_empty(&pScreen->pixmap_dirty_list))
-    {
-        xf86DrvMsg(X_INFO, pScrn->scrnIndex,
-                   "pixmap_dirty_list is not empty\n");
-
-        ls_dirty_update(pScreen, timeout);
-    }
 }
 
 
@@ -608,12 +508,6 @@ static void LS_ProbeGPU(ScrnInfoPtr pScrn,
         xf86Msg(X_INFO," Description: %s\n", version->desc);
 
         if (!strncmp("lsdc", version->name, version->name_len))
-        {
-            lsp->is_lsdc = TRUE;
-            lsp->is_loongson_drm = FALSE;
-            lsp->is_gsgpu = FALSE;
-        }
-        else if (!strncmp("loongson-drm", version->name, version->name_len))
         {
             lsp->is_lsdc = FALSE;
             lsp->is_loongson_drm = TRUE;
@@ -985,72 +879,6 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
 }
 
 /*
- *  PresentSharedPixmap is a function exposed by the source driver
- *  for the X server or sink driver to call to request a present
- *  on a given shared pixmap. This way, presents can be driven by
- *  the sink's vblank instead of a timer or similar mechanism.
- */
-static Bool msPresentSharedPixmap(PixmapPtr slave_dst)
-{
-    // pointer to master copy of pixmap for pixmap sharing
-    PixmapPtr pMasterPix = slave_dst->master_pixmap;
-    ScreenPtr pScreen = pMasterPix->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-
-    msPixmapPrivPtr ppriv = msGetPixmapPriv(pDrmMode, pMasterPix);
-    RegionPtr region = DamageRegion(ppriv->dirty->damage);
-
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "\n");
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-               "-------- %s started --------\n", __func__);
-
-    if (RegionNotEmpty(region))
-    {
-        redisplay_dirty(ppriv->slave_src->pScreen, ppriv->dirty, NULL);
-        DamageEmpty(ppriv->dirty->damage);
-
-        return TRUE;
-    }
-
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-               "-------- %s finished --------\n", __func__);
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "\n");
-
-    return FALSE;
-}
-
-static Bool msStopFlippingPixmapTracking(DrawablePtr src,
-                             PixmapPtr slave_dst1, PixmapPtr slave_dst2)
-{
-    ScreenPtr pScreen = src->pScreen;
-    loongsonPtr lsp = loongsonPTR(xf86ScreenToScrn(pScreen));
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    msPixmapPrivPtr ppriv1 = msGetPixmapPriv(pDrmMode, slave_dst1->master_pixmap);
-    msPixmapPrivPtr ppriv2 = msGetPixmapPriv(pDrmMode, slave_dst2->master_pixmap);
-
-    Bool ret = TRUE;
-
-    ret &= PixmapStopDirtyTracking(src, slave_dst1);
-    ret &= PixmapStopDirtyTracking(src, slave_dst2);
-
-    if (ret)
-    {
-        ppriv1->slave_src = NULL;
-        ppriv2->slave_src = NULL;
-
-        ppriv1->dirty = NULL;
-        ppriv2->dirty = NULL;
-
-        ppriv1->defer_dirty_update = FALSE;
-        ppriv2->defer_dirty_update = FALSE;
-    }
-
-    return ret;
-}
-
-/*
  * Adjust the screen pixmap for the current location of the front buffer.
  * This is done at EnterVT when buffers are bound as long as the resources
  * have already been created, but the first EnterVT happens before
@@ -1208,27 +1036,6 @@ static Bool LS_CreateScreenResources(ScreenPtr pScreen)
 
     return ret;
 }
-
-
-static Bool LS_RequestSharedPixmapNotifyDamage(PixmapPtr pPixman)
-{
-    ScreenPtr pScreen = pPixman->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-    loongsonPtr lsp = loongsonPTR(pScrn);
-    struct drmmode_rec * const pDrmMode = &lsp->drmmode;
-    msPixmapPrivPtr ppriv;
-
-    TRACE_ENTER();
-
-    ppriv = msGetPixmapPriv(pDrmMode, pPixman->master_pixmap);
-
-    ppriv->notify_on_damage = TRUE;
-
-    TRACE_EXIT();
-
-    return TRUE;
-}
-
 
 static Bool LS_SharedPixmapNotifyDamage(PixmapPtr ppix)
 {
@@ -1650,10 +1457,6 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
     pScreen->StopPixmapTracking = PixmapStopDirtyTracking;
 
     pScreen->SharedPixmapNotifyDamage = LS_SharedPixmapNotifyDamage;
-    pScreen->RequestSharedPixmapNotifyDamage = LS_RequestSharedPixmapNotifyDamage;
-
-    pScreen->PresentSharedPixmap = msPresentSharedPixmap;
-    pScreen->StopFlippingPixmapTracking = msStopFlippingPixmapTracking;
 
     if (!xf86CrtcScreenInit(pScreen))
     {

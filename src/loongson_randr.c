@@ -273,9 +273,8 @@ static void LS_DisableSharedPixmapFlipping(RRCrtcPtr crtc)
     }
 }
 
-
 static PixmapDirtyUpdatePtr ls_dirty_get_ent(ScreenPtr pScreen,
-                                             PixmapPtr slave_dst)
+                                             PixmapPtr secondary_dst)
 {
     PixmapDirtyUpdatePtr ent;
 
@@ -286,7 +285,7 @@ static PixmapDirtyUpdatePtr ls_dirty_get_ent(ScreenPtr pScreen,
 
     xorg_list_for_each_entry(ent, &pScreen->pixmap_dirty_list, ent)
     {
-        if (ent->slave_dst == slave_dst)
+        if (ent->secondary_dst == secondary_dst)
             return ent;
     }
 
@@ -311,8 +310,8 @@ static Bool LS_StartFlippingPixmapTracking(RRCrtcPtr crtc,
     loongsonPtr lsp = loongsonPTR(pScrn);
     struct drmmode_rec * const pDrmMode = &lsp->drmmode;
 
-    msPixmapPrivPtr ppriv1 = msGetPixmapPriv(pDrmMode, slave_dst1->master_pixmap);
-    msPixmapPrivPtr ppriv2 = msGetPixmapPriv(pDrmMode, slave_dst2->master_pixmap);
+    msPixmapPrivPtr ppriv1 = msGetPixmapPriv(pDrmMode, slave_dst1->primary_pixmap);
+    msPixmapPrivPtr ppriv2 = msGetPixmapPriv(pDrmMode, slave_dst2->primary_pixmap);
 
     if (!PixmapStartDirtyTracking(src, slave_dst1, x, y, dst_x, dst_y, rotation))
     {

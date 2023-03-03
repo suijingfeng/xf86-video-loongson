@@ -81,19 +81,23 @@ static void loongson_memcpy(void *pDst,
 
 void loongson_init_blitter(void)
 {
+#ifdef HAVE_LASX
     if (loongarch_have_feature(LOONGARCH_LASX))
     {
         loongson_blt = lasx_blt_one_line_u8;
         xf86Msg(X_INFO, "LoongArch: have LASX and LSX support\n");
         return;
     }
+#endif
 
+#ifdef HAVE_LSX
     if (loongarch_have_feature(LOONGARCH_LSX))
     {
         loongson_blt = lsx_blt_one_line_u8;
         xf86Msg(X_INFO, "LoongArch: have LSX support\n");
         return;
     }
+#endif
 
     loongson_blt = loongson_memcpy;
 }
