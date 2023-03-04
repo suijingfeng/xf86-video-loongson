@@ -507,11 +507,19 @@ static void LS_ProbeGPU(ScrnInfoPtr pScrn,
         xf86Msg(X_INFO," Date: %s\n", version->date);
         xf86Msg(X_INFO," Description: %s\n", version->desc);
 
-        if (!strncmp("lsdc", version->name, version->name_len))
+        if (!strncmp("loongson", version->name, version->name_len))
         {
             lsp->is_lsdc = FALSE;
-            lsp->is_loongson_drm = TRUE;
-            lsp->is_gsgpu = FALSE;
+            lsp->is_loongson_drm = FALSE;
+            lsp->is_loongson = TRUE;
+	    lsp->is_gsgpu = FALSE;
+        }
+	else if (!strncmp("lsdc", version->name, version->name_len))
+        {
+            lsp->is_lsdc = TRUE;
+            lsp->is_loongson_drm = FALSE;
+            lsp->is_loongson = FALSE;
+	    lsp->is_gsgpu = FALSE;
         }
 #if HAVE_LIBDRM_GSGPU
         else if (!strncmp("gsgpu", version->name, version->name_len))
@@ -533,7 +541,8 @@ static void LS_ProbeGPU(ScrnInfoPtr pScrn,
 
         xf86Msg(X_INFO, " Is lsdc: %s\n", lsp->is_lsdc ? "Yes" : "no");
         xf86Msg(X_INFO, " Is loongson-drm: %s\n", lsp->is_loongson_drm ? "Yes" : "no");
-        xf86Msg(X_INFO, " Is gsgpu: %s\n", lsp->is_gsgpu ? "Yes" : "no");
+        xf86Msg(X_INFO, " Is loongson: %s\n", lsp->is_loongson ? "Yes" : "no");
+	xf86Msg(X_INFO, " Is gsgpu: %s\n", lsp->is_gsgpu ? "Yes" : "no");
         xf86Msg(X_INFO,"\n");
     }
 
@@ -1573,7 +1582,9 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
                 ret = LS_DRI3_Init(pScreen, "lsdc");
             else if (lsp->is_loongson_drm)
                 ret = LS_DRI3_Init(pScreen, "loongson-drm");
-            else if (lsp->is_gsgpu)
+            else if (lsp->is_loongson)
+                ret = LS_DRI3_Init(pScreen, "loongson");
+	    else if (lsp->is_gsgpu)
                 ret = LS_DRI3_Init(pScreen, "gsgpu");
         }
 #if HAVE_LIBDRM_ETNAVIV
@@ -1592,6 +1603,8 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 #endif
         else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE)
             ret = LS_DRI3_Init(pScreen, "loongson-drm");
+        else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE)
+            ret = LS_DRI3_Init(pScreen, "loongson");
 
         if (ret == FALSE)
         {

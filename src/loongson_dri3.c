@@ -361,6 +361,11 @@ Bool LS_DRI3_Init(ScreenPtr pScreen, const char *name)
         fd = drmOpenWithType(name, NULL, DRM_NODE_PRIMARY);
         xf86DrvMsg(pScrn->scrnIndex, X_INFO, "DRI3: Primary node fd: %d\n", fd);
     }
+    else if (strcmp(name, "loongson") == 0)
+    {
+        fd = drmOpenWithType(name, NULL, DRM_NODE_PRIMARY);
+        xf86DrvMsg(pScrn->scrnIndex, X_INFO, "DRI3: Primary node fd: %d\n", fd);
+    }
     else if (strcmp(name, "gsgpu") == 0)
     {
         fd = drmOpenWithType(name, NULL, DRM_NODE_RENDER);

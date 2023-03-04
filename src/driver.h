@@ -72,6 +72,7 @@ struct LoongsonRec {
     Bool is_gsgpu;
     Bool is_lsdc;
     Bool is_loongson_drm;
+    Bool is_loongson;
     Bool is_prime_supported;
     Bool has_etnaviv;
 
