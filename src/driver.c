@@ -707,7 +707,7 @@ static Bool PreInit(ScrnInfoPtr pScrn, int flags)
 #endif
 
 #if HAVE_LIBDRM_ETNAVIV
-    if (lsp->is_loongson_drm &&lsp->has_etnaviv)
+    if ((lsp->is_loongson_drm || lsp->is_loongson) && lsp->has_etnaviv)
     {
         etnaviv_device_init(pScrn);
     }
@@ -1576,7 +1576,8 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 #ifdef DRI3
     if (pDrmMode->exa_enabled && lsp->is_prime_supported)
     {
-        if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE)
+        if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_FAKE ||
+            pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE)
         {
             if (lsp->is_lsdc)
                 ret = LS_DRI3_Init(pScreen, "lsdc");
@@ -1590,10 +1591,6 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
 #if HAVE_LIBDRM_ETNAVIV
         else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_ETNAVIV)
         {
-            if (lsp->is_lsdc)
-                ret = etnaviv_dri3_ScreenInit(pScreen);
-
-            if (lsp->is_loongson_drm)
                 ret = etnaviv_dri3_ScreenInit(pScreen);
         }
 #endif
@@ -1601,9 +1598,7 @@ static Bool ScreenInit(ScreenPtr pScreen, int argc, char **argv)
         else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_GSGPU)
             ret = gsgpu_dri3_init(pScreen);
 #endif
-        else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE)
-            ret = LS_DRI3_Init(pScreen, "loongson-drm");
-        else if (pDrmMode->exa_acc_type == EXA_ACCEL_TYPE_SOFTWARE)
+	else
             ret = LS_DRI3_Init(pScreen, "loongson");
 
         if (ret == FALSE)
